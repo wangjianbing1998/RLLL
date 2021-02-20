@@ -21,7 +21,7 @@ from torch.utils import data
 from torch.utils.data import DataLoader
 
 from datasets.base_dataset import BaseDataset
-from util.util import flat_iterators, is_gpu_avaliable
+from util.util import flat_iterators
 
 dataset_names = [dir.replace("_", "").replace("dataset.py", "").lower() for dir in os.listdir('datasets/') if
                  "_dataset" in dir and "base" not in dir]
@@ -39,7 +39,7 @@ def find_dataset_using_name(dataset_name):
     dataset = None
     target_dataset_name = dataset_name.replace('_', '') + 'dataset'
     for name, cls in datasetlib.__dict__.items():
-        if 'dataset' in name.lower() and issubclass(cls, BaseDataset):
+        if 'dataset' in name.lower():
             if name.lower() == target_dataset_name.lower():
                 dataset = cls
 
@@ -87,7 +87,7 @@ def create_splited_datasets(opt, phase, dataset_name, nb_tasks):
                          batch_size=opt.batch_size,
                          shuffle=True,
                          num_workers=opt.num_workers,
-                         pin_memory=False if is_gpu_avaliable(opt) else True)
+                         pin_memory=False)
 
 
 def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, convert=True):

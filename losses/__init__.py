@@ -44,7 +44,7 @@ def find_loss_using_name(loss_name):
     loss = None
     target_loss_name = loss_name.replace('_', '') + 'loss'
     for name, cls in losslib.__dict__.items():
-        if 'loss' in name.lower() and issubclass(cls, BaseLoss):
+        if 'loss' in name.lower():
             loss_names.append(name.lower())
             if name.lower() == target_loss_name.lower():
                 loss = cls

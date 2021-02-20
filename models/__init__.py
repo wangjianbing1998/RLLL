@@ -44,7 +44,7 @@ def find_model_using_name(model_name):
     model = None
     target_model_name = model_name.replace('_', '') + 'model'
     for name, cls in modellib.__dict__.items():
-        if 'model' in name.lower() and issubclass(cls, BaseModel):
+        if 'model' in name.lower():
             model_names.append(name.lower())
             if name.lower() == target_model_name.lower():
                 model = cls

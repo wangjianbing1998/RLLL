@@ -6,9 +6,10 @@ from collections import OrderedDict
 
 import torch
 
+# torch.multiprocessing.set_start_method('spawn')
 from networks import get_scheduler
 from task_datasets import PseudoData
-from util.util import MatrixItem, is_gpu_avaliable, rmdirs
+from util.util import MatrixItem, is_gpu_avaliable
 
 
 class BaseModel(ABC):

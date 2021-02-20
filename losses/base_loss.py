@@ -8,7 +8,6 @@
 ------------      -------    --------
 2021/1/23 12:38   jianbingxia     1.0    
 '''
-import logging
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 
@@ -81,8 +80,8 @@ class KDLoss():
         self.log_sotfmax = nn.LogSoftmax(dim=-1)
 
     def __call__(self, preds, gts):
-        logging.debug("preds:" + str(preds))
-        logging.debug("gts:" + str(gts))
+        # logging.debug("preds:" + str(preds))
+        # logging.debug("gts:" + str(gts))
         preds = F.softmax(preds, dim=-1)
         preds = torch.pow(preds, 1. / self.temp)
         # l_preds = F.softmax(preds, dim=-1)

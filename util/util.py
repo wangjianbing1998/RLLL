@@ -304,7 +304,6 @@ class TestMatrix(object):
         else:
             raise ValueError(f'Expected values is <MatrixItem> or <predictions,gound-truths>, but got {values}')
 
-
     def __get_df_matrix(self):
         nb_tasks = max(max(self.matrix.keys())) + 1
         ans = np.zeros((nb_tasks, nb_tasks))
@@ -341,19 +340,7 @@ def un_onehot(target: torch.Tensor):
 
 
 def log(level="info"):
-    level = level.upper()
-    if level == 'DEBUG':
-        level = logging.DEBUG
-    elif level == 'INFO':
-        level = logging.INFO
-    elif level == 'WARNING':
-        level = logging.WARNING
-    elif level == 'ERROR':
-        level = logging.ERROR
-    elif level == 'CRITICAL':
-        level = logging.CRITICAL
-    else:
-        raise ValueError(f'Expected debug|info|warning|error|critical, but got {level}')
+    level = get_log_level(level)
 
     @wrapt.decorator
     def _wrapper(func, instance, args, kwargs):
@@ -364,3 +351,20 @@ def log(level="info"):
         return res
 
     return _wrapper
+
+
+def get_log_level(level: str) -> int:
+    level = level.upper()
+    if level == 'DEBUG':
+        level = logging.DEBUG
+    elif level == 'INFO':
+        level = logging.INFO
+    elif level in ['WARNING', 'WARN']:
+        level = logging.WARNING
+    elif level == 'ERROR':
+        level = logging.ERROR
+    elif level in ['CRITICAL', 'FATAL']:
+        level = logging.CRITICAL
+    else:
+        raise ValueError(f'Expected debug|info|warning|warn|error|critical|fatal, but got {level}')
+    return level

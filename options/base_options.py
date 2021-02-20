@@ -7,8 +7,7 @@ import losses
 import models
 import networks
 import task_datasets
-from util import util
-from util.util import rmdirs
+from util.util import rmdirs, get_log_level
 
 
 class BaseOptions(object):
@@ -26,15 +25,15 @@ class BaseOptions(object):
     def initialize(self, parser):
         """Define the common options that are used in both training and test."""
         # logging configuration
-        # parser.add_argument('--log_filename', type=str, default="output/{}.txt", help='logging filename')
-        parser.add_argument('--log_filename', type=str, default=None, help='logging filename')
+        parser.add_argument('--log_filename', type=str, default="output/{}.txt", help='logging filename')
+        # parser.add_argument('--log_filename', type=str, default=None, help='logging filename')
         parser.add_argument('--log_filemode', type=str, default='a', help='logging filemode')
         parser.add_argument('--log_format', type=str, default='%(asctime)s - %(levelname)s - %(message)s',
                             help='logging format')
-        parser.add_argument('--log_level', type=int, default=logging.DEBUG, help='logging level')
+        parser.add_argument('--log_level', type=str, default="debug", help='logging level')
         # training before
         parser.add_argument('--dels', type=str, default="",
-                            help='which need to be clear delete, strings contains ckpts, logs or outputs ')
+                            help='which need to be clear delete, strings contains ckpt, log or output ')
         # basic parameters
         parser.add_argument('--name', type=str, default='',
                             help='name of the experiment. opt.name=opt.model_name+"_"+opt.dataset_list')
@@ -124,25 +123,28 @@ class BaseOptions(object):
 
         if opt.log_filename is not None:
             opt.log_filename = opt.log_filename.format(opt.name)
-        logging.basicConfig(filename=opt.log_filename,
-                            filemode=opt.log_filemode,
-                            format=opt.log_format,
-                            level=opt.log_level,
-                            )
-        logging.info(f'Name={opt.name:*^50}')
-        # clear(delete) the directories
+        log_level = get_log_level(opt.log_level)
 
         opt.checkpoints_dir = os.path.join(opt.checkpoints_dir, opt.name + '/')
         opt.logs_dir = os.path.join(opt.logs_dir, opt.name + '/')
 
-        if "logs" in opt.dels:
-            rmdirs(opt.logs_dir)
-        if "ckpts" in opt.dels:
-            rmdirs(opt.checkpoints_dir)
-        if "outputs" in opt.dels:
+        if "output" in opt.dels and os.path.isfile(opt.log_filename):
             os.remove(opt.log_filename)
+        os.makedirs(os.path.dirname(opt.log_filename), exist_ok=True)
 
-        # prepare checkpoints_dir
+        logging.basicConfig(filename=opt.log_filename,
+                            filemode=opt.log_filemode,
+                            format=opt.log_format,
+                            level=log_level,
+                            )
+        logging.info(f'Name={opt.name:*^50}')
+
+        # clear(delete) the directories
+        if "log" in opt.dels and os.path.isdir(opt.logs_dir):
+            rmdirs(opt.logs_dir)
+        if "ckpt" in opt.dels and os.path.isdir(opt.checkpoints_dir):
+            rmdirs(opt.checkpoints_dir)
+
         os.makedirs(opt.checkpoints_dir, exist_ok=True)
         os.makedirs(opt.logs_dir, exist_ok=True)
 

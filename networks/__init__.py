@@ -54,7 +54,7 @@ def find_net_using_name(net_name):
     net = None
     target_net_name = net_name.replace('_', '') + 'net'
     for name, cls in netlib.__dict__.items():
-        if 'net' in name.lower() and issubclass(cls, BaseNet):
+        if 'net' in name.lower():
             net_names.append(name.lower())
             if name.lower() == target_net_name.lower():
                 net = cls

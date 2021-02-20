@@ -49,7 +49,7 @@ def find_taskdataset_using_name(taskdataset_name):
     task_dataset = None
     target_loss_name = taskdataset_name.replace('_', '') + 'taskdataset'
     for name, cls in losslib.__dict__.items():
-        if 'taskdataset' in name.lower() and issubclass(cls, BaseTaskDataset):
+        if 'taskdataset' in name.lower():
             taskdataset_names.append(name.lower())
             if name.lower() == target_loss_name.lower():
                 task_dataset = cls
