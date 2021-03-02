@@ -1,8 +1,10 @@
-# Train
+# Prepare environments
 
-nohup python train.py --n_epochs 1000 --n_epochs_decay 500 --model_name lwf --num_workers 0  --log_level info --dels logs_ckpts_outputs &
-nohup python train.py --n_epochs 1000 --n_epochs_decay 500 --model_name finetune --num_workers 0 --log_level info --dels logs_ckpts_outputs &
-nohup python train.py --n_epochs 1000 --n_epochs_decay 500 --model_name warmtune --num_workers 0 --log_level info --dels logs_ckpts_outputs &
-nohup python train.py --n_epochs 1000 --n_epochs_decay 500 --model_name hottune --num_workers 0 --log_level info --dels logs_ckpts_outputs &
-nohup python train.py --n_epochs 1000 --n_epochs_decay 500 --model_name folwf --num_workers 0 --log_level info --dels logs_ckpts_outputs &
-nohup python train.py --n_epochs 1000 --n_epochs_decay 500 --model_name rlll --num_workers 0 --log_level info --dels logs_ckpts_outputs &
+conda activate
+pip uninstall apex
+git clone https://www.github.com/nvidia/apex
+cd apex
+python setup.py install --user
+cd ..
+rm -rf apex
+

@@ -27,6 +27,24 @@ R-LifeLongLearning
 
 
 
+# DataPrepare
+```sh
+cd data
+```
+
+Only need to prepare MNIST data or none, because data will be prepare in train.py or test.py with `--load_dataset_mode=reader`, here, `--xxx-dataset_dir` need to be specified,
+
+For Examples:
+
+```sh
+python train.py --load_dataset_mode reader --cifar100-dataset-dir ./data/CIFAR100
+```
+
+- prepare MNIST data
+
+```python
+python mnist_download.py
+```
 
 # Train
 - run at #66 server
@@ -46,3 +64,9 @@ sh run_53.sh
 sh run_37.sh
 ```
 
+
+
+# Test
+```sh
+python test.py
+```

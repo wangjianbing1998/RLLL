@@ -72,14 +72,15 @@ class BaseLoss(ABC):
         pass
 
 
-class KDLoss():
+class KDLoss(nn.Module):
     """KD loss between """
 
     def __init__(self, temp=2):
+        super().__init__()
         self.temp = temp
         self.log_sotfmax = nn.LogSoftmax(dim=-1)
 
-    def __call__(self, preds, gts):
+    def forward(self, preds, gts):
         # logging.debug("preds:" + str(preds))
         # logging.debug("gts:" + str(gts))
         preds = F.softmax(preds, dim=-1)

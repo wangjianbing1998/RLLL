@@ -24,6 +24,13 @@ class BaseOptions(object):
 
     def initialize(self, parser):
         """Define the common options that are used in both training and test."""
+
+        # Multi-GPUs Distributed
+        parser.add_argument('--init_method', type=str, default="tcp://127.0.0.1:46622",
+                            help='the main machine or process ip:port, all machine or process is same as the main one')
+        parser.add_argument('--rank', type=int, default=0, help='rank of current machine or process')
+        parser.add_argument('--word_size', type=int, default=1, help='the number of machine or process')
+
         # logging configuration
         parser.add_argument('--log_filename', type=str, default="output/{}.txt", help='logging filename')
         # parser.add_argument('--log_filename', type=str, default=None, help='logging filename')
@@ -42,8 +49,14 @@ class BaseOptions(object):
         parser.add_argument('--logs_dir', type=str, default='./logs',
                             help='logs are saved here, such as acc/loss curve, graph of model')
         parser.add_argument('--verbose', action='store_true', help='if specified, print more debugging information')
+
+        parser.add_argument('--conffix', default='_', type=str,
+                            help='the connected str between {a} and {b}')
+
         parser.add_argument('--suffix', default='', type=str,
                             help='customized suffix: opt.name = opt.name + suffix: e.g., {opt.name}_{opt.suffix}')
+        parser.add_argument('--preffix', default='', type=str,
+                            help='customized preffix: opt.log_filename = opt.preffix+opt.name: e.g., {opt.log_filename}={opt.preffix}_{opt.name}')
 
         self.initialized = True
         return parser
@@ -115,23 +128,26 @@ class BaseOptions(object):
     def parse(self):
         """Parse our options, create checkpoints directory suffix, and set up gpu device."""
         opt = self.gather_options()
+        opt.num_classes = task_datasets.get_num_classes_by_data_list(opt.dataset_list)  # initialize num_classes
         opt.isTrain = self.isTrain  # fit or test
         opt.name = opt.model_name + "_" + "-".join(opt.dataset_list)
         # process opt.suffix
         if opt.suffix:
             opt.name = opt.name + "_" + opt.suffix
 
-        if opt.log_filename is not None:
-            opt.log_filename = opt.log_filename.format(opt.name)
-        log_level = get_log_level(opt.log_level)
+        opt.log_filename = opt.log_filename.strip().lower()
 
+        if opt.log_filename != 'none':
+            opt.log_filename = opt.log_filename.format(f'{opt.preffix}_{opt.name}')
+            if "output" in opt.dels and os.path.isfile(opt.log_filename):
+                os.remove(opt.log_filename)
+            os.makedirs(os.path.dirname(opt.log_filename), exist_ok=True)
+        else:
+            opt.log_filename = None
         opt.checkpoints_dir = os.path.join(opt.checkpoints_dir, opt.name + '/')
         opt.logs_dir = os.path.join(opt.logs_dir, opt.name + '/')
 
-        if "output" in opt.dels and os.path.isfile(opt.log_filename):
-            os.remove(opt.log_filename)
-        os.makedirs(os.path.dirname(opt.log_filename), exist_ok=True)
-
+        log_level = get_log_level(opt.log_level)
         logging.basicConfig(filename=opt.log_filename,
                             filemode=opt.log_filemode,
                             format=opt.log_format,
@@ -142,6 +158,7 @@ class BaseOptions(object):
         # clear(delete) the directories
         if "log" in opt.dels and os.path.isdir(opt.logs_dir):
             rmdirs(opt.logs_dir)
+
         if "ckpt" in opt.dels and os.path.isdir(opt.checkpoints_dir):
             rmdirs(opt.checkpoints_dir)
 

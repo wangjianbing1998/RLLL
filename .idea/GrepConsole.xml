@@ -26,16 +26,6 @@
                           </GrepModel>
                         </option>
                       </Pin>
-                      <Pin>
-                        <option name="consoleUUID" value="fdcfb4c2-c342-4007-9a52-c93fb93003a0" />
-                        <option name="contentType" value="ConsoleContent" />
-                        <option name="grepModel">
-                          <GrepModel>
-                            <option name="expression" value="learning rate" />
-                            <option name="unlessExpression" value="" />
-                          </GrepModel>
-                        </option>
-                      </Pin>
                     </list>
                   </option>
                 </Pins>

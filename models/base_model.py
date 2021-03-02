@@ -5,11 +5,13 @@ from abc import abstractmethod
 from collections import OrderedDict
 
 import torch
-
 # torch.multiprocessing.set_start_method('spawn')
-from networks import get_scheduler
+from apex.parallel import DistributedDataParallel
+
+from networks import get_scheduler, _init_weights
 from task_datasets import PseudoData
-from util.util import MatrixItem, is_gpu_avaliable
+from util.data_parallel_util import DataParallelModel, DataParallelCriterion
+from util.util import MatrixItem, is_gpu_avaliable, is_distributed_avaliable
 
 
 class BaseModel(ABC):
@@ -21,8 +23,6 @@ class BaseModel(ABC):
         self.device = torch.device('cuda:{}'.format(self.gpu_ids[0])) if self.gpu_ids else torch.device(
             'cpu')  # get device tag: CPU or GPU
         self.save_dir = opt.checkpoints_dir  # save all the checkpoints to save_dir
-        if opt.preprocess != 'scale_width':  # with [scale_width], input images might have different sizes, which hurts the performance of cudnn.benchmark.
-            torch.backends.cudnn.benchmark = True
 
         self.loss_names = []
         self.net_names = []
@@ -41,6 +41,8 @@ class BaseModel(ABC):
         self.target, self.image = None, None
         self.output = None
         self._continued_task_index = 0  # continued trained task index
+
+        self.network_printed = False
 
     @staticmethod
     def modify_commandline_options(parser, is_train):
@@ -96,7 +98,7 @@ class BaseModel(ABC):
 
         if not self.isTrain or opt.continue_train:
             self.load_networks(opt.load_epoch)
-        self.print_networks()
+        self.print_networks(repeat=False)
 
     def eval(self):
         """Make models eval mode during test time"""
@@ -203,12 +205,15 @@ class BaseModel(ABC):
         else:
             self.__patch_instance_norm_state_dict(state_dict, getattr(module, key), keys, i + 1)
 
-    def print_networks(self):
+    def print_networks(self, repeat=True):
         """Print the total number of parameters in the network and (if verbose) network architecture
 
         Parameters:
             verbose (bool) -- if verbose: print the network architecture
         """
+        if self.network_printed and not repeat:
+            return
+        self.network_printed = True
         logging.info('---------- Networks initialized -------------')
         for name in self.net_names:
             if isinstance(name, str):
@@ -238,4 +243,44 @@ class BaseModel(ABC):
         if self.output is None or self.target is None:
             raise ValueError(
                 f"Expected model.set_data(data) and model.forward() be called before model.get_matrix_item(), but not called {'forward()' if self.output is None else ''} {'and set_data()' if self.target is None else ''}")
-        return MatrixItem(self.output[task_index], self.target)
+        return MatrixItem(self.output[task_index], self.target, self.loss_criterion, task_index)
+
+    def init_net_optimizer_with_apex(self, opt, net, optimizer, criterion):
+        """Initialize a network: 1. register CPU/GPU device (with multi-GPU support); 2. initialize the network weights
+        Parameters:
+            net (network)      -- the network to be initialized
+            init_type (str)    -- the tag of an initialization method: normal | xavier | kaiming | orthogonal
+            gain (float)       -- scaling factor for normal, xavier and orthogonal.
+            gpu_ids (int list) -- which GPUs the network runs on: e.g., 0,1,2
+
+        Return an initialized network.
+        """
+        from apex import amp
+
+        if len(opt.gpu_ids) > 0:
+            assert (torch.cuda.is_available())
+
+            if is_distributed_avaliable(opt):
+                # bn sync, only if distributed is available
+                from apex.parallel import convert_syncbn_model
+                net = convert_syncbn_model(net)
+            net.to(device=self.device)
+            net, optimizer = amp.initialize(net, optimizer,
+                                            opt_level="O1")  # here, the net can be replaced with list of nets
+
+            # net = DataParallel(net, opt.gpu_ids)  # multi-GPUs，最简单但是效果最不好的多GPU方法
+
+            if is_distributed_avaliable(opt):
+                torch.distributed.init_process_group(backend='nccl', init_method=opt.init_method, rank=opt.rank,
+                                                     world_size=opt.word_size)
+                net = DistributedDataParallel(net, delay_allreduce=True)  # must be after amp.initialize
+
+            else:
+                net = DataParallelModel(net, device_ids=opt.gpu_ids)
+                criterion = DataParallelCriterion(criterion, device_ids=opt.gpu_ids)
+                criterion = criterion.module
+        else:
+            net, optimizer = amp.initialize(net, optimizer, opt_level="O1")  # 这里多个net就用列表
+
+        _init_weights(net, opt.init_type, init_gain=opt.init_gain)
+        return net, optimizer, criterion

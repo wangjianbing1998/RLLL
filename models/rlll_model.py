@@ -1,4 +1,5 @@
 import torch
+from apex import amp
 
 from losses import create_loss
 from models.base_model import BaseModel
@@ -51,13 +52,16 @@ class RlllModel(BaseModel):
             self.optimizer = torch.optim.SGD(self.net_main.parameters(), lr=opt.lr)
         else:
             raise ValueError(f"Expected opt.optimizer_type in ['adam','sgd'], but got {opt.optimizer_type}")
+        self.net_main, self.optimizer, self.loss_criterion = self.init_net_optimizer_with_apex(opt, self.net_main,
+                                                                                               self.optimizer,
+                                                                                               self.loss_criterion)
         self.optimizers = [self.optimizer]
         self.loss_names = getattr(self.loss_criterion, "loss_names")
 
         """
         unfreeze shared_cnn_layers, shared_fc_layers and other_layers,
             calculate other loss
-            not backward
+            backward
         """
 
         self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=True)
@@ -72,7 +76,7 @@ class RlllModel(BaseModel):
         for net in self._get_all_nets():
             if "net" in item and hasattr(net, item):
                 return getattr(net, item)
-        raise AttributeError(f"'LwfModel' object has no attribute '{item}'")
+        raise AttributeError(f"'RlllModel' object has no attribute '{item}'")
 
     def set_data(self, data: PseudoData):
         """Unpack input _data from the dataloader and perform necessary pre-processing steps.
@@ -96,16 +100,19 @@ class RlllModel(BaseModel):
         # caculate the intermediate results if necessary; here self.output has been computed during function <forward>
         # calculate loss given the input and intermediate results
         self.loss_total = self.loss_criterion(self.output, self.target, task_index)
-        self.loss_total.backward()  # calculate gradients of network G w.r.t. loss_total
+        with amp.scale_loss(self.loss_total, self.optimizer) as scaled_loss:
+            scaled_loss.backward()
 
     def optimize_parameters(self, task_index):
         """Update network weights; it will be called in every training iteration."""
-        self.optimizer.zero_grad()  # clear network G's existing gradients
-        self.backward(task_index)  # calculate gradients for network G
-        self.optimizer.step()  # update gradients for network G
+
+        self.optimizer.zero_grad()  # clear network's existing gradients
+        self.backward(task_index)  # calculate gradients for network main
+        self.optimizer.step()  # update gradients for network
 
     def train(self, task_index):
-        self.set_requires_grad(self.net_main.module.multi_output_classifier.other_layers(task_index),requires_grad=True)
+        self.set_requires_grad(self.net_main.module.multi_output_classifier.other_layers(task_index),
+                               requires_grad=True)
         self.set_requires_grad(self.net_main.module.multi_output_classifier.task_layer(task_index), requires_grad=True)
         BaseModel.train(self, task_index)  # call the initialization method of BaseModel
 

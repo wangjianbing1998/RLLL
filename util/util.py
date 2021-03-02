@@ -173,14 +173,32 @@ def rmdirs(paths):
 
 
 def seed_everything(seed):
-    """set seed for everything"""
+    """set seed for everything
+    """
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False  # if benchmark=True, deterministic will be False
     torch.backends.cudnn.deterministic = True
+
+
+def split2numclasses(A, n) -> []:
+    """split list <A> into n splits
+
+    >>> split2numclasses(range(10),3)
+    [4, 4, 2]
+    """
+    res = []
+    m = int(ceil(len(A) / float(n)))
+    s = 0
+    S = len(A)
+    for i in range(n):
+        res.append(min(m, S - s))
+        s += m
+    return res
 
 
 def split2n(A, n) -> []:
@@ -242,26 +260,31 @@ class MatrixItem(object):
     """For per task"""
 
     def __repr__(self):
-        return f'{self.accuracy}'
+        return f'loss={self.loss},acc={self.accuracy}'
 
-    def __init__(self, preds=None, gts=None):
+    def __init__(self, preds=None, gts=None, loss_criterion=None, task_index=None):
         self.accuracy = 0
+        self.loss = 0
         if preds is not None and gts is not None:
             self.accuracy = self.__cal_accuracy(preds, gts)
+            self.loss = loss_criterion(preds, gts, task_index)
+            self.loss = self.loss.item()
 
     def __add__(self, other):
         accuracy = self.accuracy + other.accuracy
-        return MatrixItem()(accuracy)
+        loss = self.loss + other.loss
+        return MatrixItem()(accuracy, loss)
 
     def __lt__(self, other):
         return self.accuracy < other.accuracy
 
-    def __truediv__(self, other):
-        return MatrixItem()(self.accuracy / other)
+    def __truediv__(self, other: 'Scaler'):
+        return MatrixItem()(self.accuracy / other, self.loss / other)
 
-    def __call__(self, accuracy, **kwargs):
+    def __call__(self, accuracy, loss, **kwargs):
         """set self.accuracy directly"""
         self.accuracy = accuracy
+        self.loss = loss
         return self
 
     def __cal_accuracy(self, preds: torch.Tensor, gts: torch.Tensor):
@@ -272,7 +295,8 @@ class MatrixItem(object):
         arg_maxs = preds
         if len(preds.shape) == 2:
             (max_vals, arg_maxs) = torch.max(preds.data, dim=1)
-        num_correct = torch.sum(gts == arg_maxs.double())
+        gts.squeeze_()
+        num_correct = torch.sum(gts == arg_maxs.long())
         acc = (num_correct * 100.0 / len(gts))
         return acc.item()
 
@@ -323,6 +347,10 @@ class TestMatrix(object):
 
 def is_gpu_avaliable(opt):
     return len(opt.gpu_ids) > 0 and torch.cuda.is_available()
+
+
+def is_distributed_avaliable(opt):
+    return is_gpu_avaliable(opt) and torch.distributed.is_available()
 
 
 def unsqueeze0(data: Bunch):

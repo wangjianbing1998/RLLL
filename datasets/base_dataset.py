@@ -25,6 +25,7 @@ class BaseDataset(data.Dataset, ABC):
         Parameters:
             opt (Option class)-- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
+        self.isTrain = opt.isTrain
         self.opt = opt
         self.data_dir = None  # specified in sub-class
 
@@ -50,7 +51,13 @@ class BaseDataset(data.Dataset, ABC):
         parser.add_argument('--no_flip', action='store_true',
                             help='if specified, do not flip the label2ImagePaths for _data augmentation')
         parser.add_argument('--mnist_dataset_dir', type=str, default='./data/MNIST/')
-        parser.add_argument('--imagenet_dataset_dir', type=str, default='./data/ImageNet/')
+        parser.add_argument('--cifar10_dataset_dir', type=str, default='./data/CIFAR10/')
+        parser.add_argument('--cifar100_dataset_dir', type=str, default='./data/CIFAR100/')
+        parser.add_argument('--imagenet_dataset_dir', type=str, default='/home/lichao/circle_conv/dataset/imagenet/')
+
+        parser.add_argument('--load_dataset_mode', type=str, default='reader',
+                            help="the mode for load dataset, 'dir' for directory loading or 'reader' for pytorch.data",
+                            choices=['dir', 'reader'])
 
         return parser
 

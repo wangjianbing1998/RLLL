@@ -9,9 +9,11 @@
 2021/1/23 12:37   jianbingxia     1.0    
 '''
 import logging
+from collections import defaultdict
 
+from datasets import dataset_names
 from task_datasets.base_task_dataset import BaseTaskDataset
-from util.util import MultiOutput, print_tensor
+from util.util import print_tensor, split2numclasses, MultiOutput
 
 """This package contains losses_without_lambda related to objective functions, optimizations, and network architectures.
 
@@ -32,6 +34,66 @@ In the function <__init__>, you need to define four lists:
 Now you can use the model class by specifying flag '--model dummy'.
 See our template model class 'template_model.py' for more details.
 """
+
+NB_MNIST = 10
+NB_CIFAR10 = 10
+NB_CIFAR100 = 100
+NB_IMAGENET = 1000
+
+nc_datas = {
+    'mnist':NB_MNIST,
+    'cifar10':NB_CIFAR10,
+    'cifar100':NB_CIFAR100,
+    'imagenet':NB_IMAGENET,
+}
+
+
+def dataname2taskindex(dataset_list):
+    """
+    calculate the <dataname2taskIndices>,  # {mnist:[0,1], imagenet:[2]}
+    Args:
+        dataset_list:
+
+    Returns: dict
+
+    >>> dataname2taskindex(['mnist_1','mnist_2','mnist_3'])
+    defaultdict(<class 'list'>, {'mnist': [0, 1, 2]})
+    """
+    dataname2taskIndices = defaultdict(list)
+    for dataset_name in dataset_names:
+        for index, data_name in enumerate(dataset_list):
+            data_name = data_name.lower()
+            if '_' in data_name:
+                data_name = data_name[:data_name.index('_')]
+            if (dataset_name.replace("dataset", "")) == data_name:  # split by "_",
+                dataname2taskIndices[dataset_name].append(index)
+    return dataname2taskIndices
+
+
+def get_num_classes_by_data_list(dataset_list):
+    """
+
+    Args:
+        dataset_list: [mnist_1,mnist_2,mnist_3]
+
+    Returns:
+        the <num_classes> with the input dataset_list
+    >>> get_num_classes_by_data_list(["mnist_1","mnist_2","mnist_3"])
+    [4, 4, 2]
+    """
+    nb_tasks = len(dataset_list)
+    dataname2taskIndices = dataname2taskindex(dataset_list)
+
+    num_classes = [0] * nb_tasks
+    for data_name, indices in dataname2taskIndices.items():
+
+        classes = split2numclasses(range(nc_datas[data_name]), len(indices))
+
+        for index, cls in zip(indices, classes):
+            num_classes[index] = cls
+
+    return num_classes
+
 
 import importlib
 
@@ -112,4 +174,4 @@ class PseudoData(object):
 
     def __repr__(self):
         return (
-            f'PseudoData \n\timage={print_tensor(self._image, pt=False)}\n\ttarget={print_tensor(self._target.output if hasattr(self._target,"output") else self._target, pt=False)}')
+            f'PseudoData \n\timage={print_tensor(self._image, pt=False)}\n\ttarget={print_tensor(self._target.output if hasattr(self._target, "output") else self._target, pt=False)}')

@@ -11,6 +11,8 @@
 
 # DATA NAME
 MNIST = "mnist"
+CIFAR10 = "cifar10"
+CIFAR100 = "cifar100"
 IMAGENET = "imagenet"
 
 # MODEL NAME

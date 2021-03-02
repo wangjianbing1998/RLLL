@@ -1,3 +1,5 @@
+import platform
+
 from .base_options import BaseOptions
 
 
@@ -9,16 +11,41 @@ class TestOptions(BaseOptions):
 
     def initialize(self, parser):
         parser = BaseOptions.initialize(self, parser)  # define shared options
-        parser.add_argument('--ntest', type=int, default=float("inf"), help='# of test examples.')
-        parser.add_argument('--results_dir', type=str, default='./results/', help='saves results here.')
-        parser.add_argument('--aspect_ratio', type=float, default=1.0, help='aspect ratio of result label2ImagePaths')
-        parser.add_argument('--phase', type=str, default='test', help='fit, val, test, etc')
-        # Dropout and Batchnorm has different behavioir during training and test.
-        parser.add_argument('--eval', action='store_true', help='use eval mode during test time.')
-        parser.add_argument('--num_test', type=int, default=50, help='how many test label2ImagePaths to run')
-        # rewrite devalue values
-        parser.set_defaults(model='test')
-        # To avoid cropping, the load_size should be the same as crop_size
-        parser.set_defaults(load_size=parser.get_default('crop_size'))
+        # name specifics
+        parser.add_argument('--model_name', type=str, default="lwf",
+                            choices=["finetune", "warmtune", "hottune", "folwf", "lwf", "rlll", ],
+                            help='model choice from finetune|warmtune|lwf|rlll', )
+        parser.add_argument('--task_dataset_name', type=str, default="custom", choices=["custom"],
+                            help='task dataset choice from custom', )
+
+        # experiment specifics
+        parser.add_argument('--seed', type=int, default=42)
+
+        parser.add_argument('--batch_size', type=int, default=64, help='input batch size')
+        parser.add_argument('--num_workers', type=int, default=0 if "Windows" in platform.platform() else 8,
+                            help='num workers for data reading, if set value >= 4, the pin_memory will be True, otherwise, it will be False')
+        parser.add_argument('--load_epoch', type=str, default='best',
+                            help='which epoch to load? set to latest to use best cached model')
+
+        # for setting inputs
+        parser.add_argument('--imsize', type=int, default=256)
+
+        # model and optimizer
+        parser.add_argument('--optimizer_type', type=str, default='adam', choices=["sgd", "adam"],
+                            help='Name of the optimizer')
+        parser.add_argument('--beta1', type=float, default=0.5, help='momentum term of adam')
+        parser.add_argument('--gamma', type=float, default=0.1)
+        parser.add_argument('--lr_factor', type=float, default=0.5)
+        parser.add_argument('--lr', type=float, default=1e-4, help='initial learning rate for adam')
+        parser.add_argument('--pool_size', type=int, default=50,
+                            help='the size of image buffer that stores previously generated images')
+        parser.add_argument('--lr_policy', type=str, default='linear',
+                            help='learning rate policy. [linear | step | plateau | cosine]')
+        parser.add_argument('--lr_decay_iters', type=int, default=50,
+                            help='multiply by a gamma every lr_decay_iters iterations')
+
+        parser.add_argument('--result_dir', type=str, default='./results/', help='saves results here.')
+
+        parser.set_defaults(preffix='test')
         self.isTrain = False
         return parser

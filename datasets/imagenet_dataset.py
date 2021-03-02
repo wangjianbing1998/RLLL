@@ -17,7 +17,7 @@ from PIL import Image
 from sklearn.utils import Bunch
 from torchvision.transforms import transforms
 
-from VARIABLES import MNIST, IMAGENET
+from VARIABLES import IMAGENET
 from datasets import BaseDataset
 from util.util import split2n, is_gpu_avaliable
 
@@ -41,7 +41,7 @@ class ImagenetDataset(BaseDataset):
 
     def __init__(self, opt, phase="train"):
         super(ImagenetDataset, self).__init__(opt)
-        self.data_dir = opt.mnist_dataset_dir
+        self.data_dir = opt.imagenet_dataset_dir
         # TODO split the dataset of val and test
         if phase == "val":
             phase = "test"

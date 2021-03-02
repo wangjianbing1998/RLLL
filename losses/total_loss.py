@@ -9,8 +9,8 @@
 2021/1/23 12:43   jianbingxia     1.0    
 '''
 import logging
+from typing import Union
 
-import numpy as np
 import torch
 from torch import nn
 
@@ -53,8 +53,11 @@ class TotalLoss(BaseLoss):
 
         return parser
 
-    def __call__(self, preds: MultiOutput, gts: MultiOutput, task_index):
-        """calculate the losses_without_lambda on multi-task
+    def __call__(self, preds: Union[MultiOutput, torch.Tensor],
+                 gts: Union[MultiOutput, torch.Tensor], task_index=None) -> 'loss Tensor':
+        """calculate the losses_without_lambda on multi-task or single task
+        loss on multi-task: preds:MultiOutput, gts:MultiOutput, losses_without_lambda and losses_with_lambda will be calculated, Return loss_total
+        loss on single-task: preds:scaler, gts:scaler, losses_without_lambda and losses_with_lambda will be None, Return loss_total(eg. ce_loss)
 
         Debug output the summary on <losses_with_lambda>, <losses_with_lambda>, <losses_without_lambda>
 
@@ -63,21 +66,31 @@ class TotalLoss(BaseLoss):
          else, then return <cross_entropy_loss> on current task
 
          """
-        task_preds, task_gts = lambda x:(preds[x]), lambda x:(gts[x])
-        self.losses_without_lambda = []
-        for i in range(self.continued_task_index + 1):
-            if i != task_index:
-                if self._plus_other_loss:
-                    self.losses_without_lambda.append(self.kd_loss(task_preds(i), task_gts(i)))
+        if isinstance(preds, MultiOutput) and isinstance(gts, MultiOutput):
+            """get <MultiOutput> loss"""
+            task_preds, task_gts = lambda x:(preds[x]), lambda x:(gts[x])
+            self.losses_without_lambda = []
+            for i in range(self.continued_task_index + 1):
+                if i != task_index:
+                    if self._plus_other_loss:
+                        self.losses_without_lambda.append(self.kd_loss(task_preds(i), task_gts(i)))
+                    else:
+                        self.losses_without_lambda.append(torch.FloatTensor([0]).cuda())
                 else:
-                    self.losses_without_lambda.append(torch.from_numpy(np.array([0])).cuda().float())
-            else:
-                self.losses_without_lambda.append(self.ce_loss(task_preds(i), un_onehot(task_gts(i))))
+                    self.losses_without_lambda.append(self.ce_loss(task_preds(i), un_onehot(task_gts(i))))
 
-        self.losses_with_lambda = [loss * lambda_ for loss, lambda_ in
-                                   zip(self.losses_without_lambda, self.lambda_all)]
-        self.loss_total = sum(self.losses_with_lambda)
-        # logging.debug(
-        #     f"total_loss={self.loss_total.item()}, losses_with_lambda={tensors2str(self.losses_with_lambda)}, losses_without_lambda={tensors2str(self.losses_without_lambda)}")
-
+            self.losses_with_lambda = [loss * lambda_ for loss, lambda_ in
+                                       zip(self.losses_without_lambda, self.lambda_all)]
+            self.loss_total = sum(self.losses_with_lambda)
+            logging.debug(
+                f"total_loss={self.loss_total.item()}, losses_with_lambda={tensors2str(self.losses_with_lambda)}, losses_without_lambda={tensors2str(self.losses_without_lambda)}")
+        else:
+            """get current task ce-loss"""
+            self.losses_without_lambda = None
+            self.losses_with_lambda = None
+            self.loss_total = self.ce_loss(preds, un_onehot(gts))
         return self.loss_total
+
+    def cuda(self, device):
+        self.kd_loss.cuda(device)
+        self.ce_loss.cuda(device)

@@ -9,11 +9,14 @@
 2021/1/26 17:25   jianbingxia     1.0    
 '''
 import logging
-from collections import defaultdict
 
-from datasets import dataset_names, create_splited_datasets, SimpleDataset
+import torch
+from torch.utils.data import DataLoader
+
+from datasets import SimpleDataset, find_dataset_using_name
+from task_datasets import dataname2taskindex
 from task_datasets.base_task_dataset import BaseTaskDataset
-from util.util import log
+from util.util import log, flat_iterators, is_distributed_avaliable
 
 
 class CustomTaskDataset(BaseTaskDataset):
@@ -26,6 +29,7 @@ class CustomTaskDataset(BaseTaskDataset):
 
     task2dataset: [SimpleDataset_fortask0,SimpleDataset_fortask1,SimpleDataset_fortask2,...]
     """
+
     def __init__(self, opt, phase="train"):
         BaseTaskDataset.__init__(self, opt, phase)
         self.dataset_list = opt.dataset_list
@@ -34,26 +38,22 @@ class CustomTaskDataset(BaseTaskDataset):
 
     @staticmethod
     def modify_commandline_options(parser):
-        parser.add_argument('--dataset_list', type=list, default=['mnist1', 'mnist2', 'mnist3'],
+        parser.add_argument('--dataset_list', nargs='+', type=str, default=['mnist1_1', 'mnist_2', 'mnist_3'],
                             help='chooses which any task_datasets are loaded. ')
-        parser.add_argument('--num_classes', type=list, default=[10, 10, 10], help="the num_class per task")
+        parser.add_argument('--num_classes', type=list, default=[4, 4, 2],
+                            help='chooses which any task_datasets are loaded. ')
+
         return parser
 
-    @log(level = "debug")
+    @log(level="debug")
     def _build_task_dataset(self):
         """build <self.task2dataset> """
-        # calculate the <dataname2taskIndices>,  # {mnist:[0,1], imagenet:[2]}
-
-        dataname2taskIndices = defaultdict(list)
-        for dataset_name in dataset_names:
-            for index, data_name in enumerate(self.dataset_list):
-                if (dataset_name.replace("dataset", "")) in data_name:
-                    dataname2taskIndices[dataset_name].append(index)
+        dataname2taskIndices = dataname2taskindex(self.dataset_list)
 
         # build task2dataset
         self.task2dataset = [SimpleDataset] * self.nb_tasks
         for data_name, indices in dataname2taskIndices.items():
-            datasets_gen = create_splited_datasets(self.opt, self.phase, data_name, len(indices))
+            datasets_gen: 'DataLoader' = self.create_splited_datasets(self.phase, data_name)
             for task_index in indices:
                 try:
                     self.task2dataset[task_index] = next(datasets_gen)
@@ -66,3 +66,25 @@ class CustomTaskDataset(BaseTaskDataset):
 
     def __getitem__(self, task_index):
         return self.task2dataset[task_index]
+
+    def create_splited_datasets(self, phase, dataset_name) -> 'DataLoader':
+        """create task_datasets on <dataset_name>, which has split into number of <nb_tasks>
+
+        Return Dataloader of (SimpleDataset_of_task0, SimpleDataset_of_task1, ...)
+
+        """
+        dataset = find_dataset_using_name(dataset_name)(self.opt, phase)
+        labelsOnTask = dataset.split2n_on_tasks(self.nb_tasks)
+        for task_index, labels in enumerate(labelsOnTask):
+            data_indices = flat_iterators((dataset(label) for label in labels))
+            simple_dataset = SimpleDataset(data_indices, dataset)
+            if is_distributed_avaliable(self.opt):
+                data_sampler = torch.utils.data.distributed.DistributedSampler(simple_dataset)
+                data_loader = DataLoader(simple_dataset, batch_size=self.opt.batch_size,
+                                         num_workers=self.opt.num_workers,
+                                         sampler=data_sampler)
+            else:
+                data_loader = DataLoader(simple_dataset, batch_size=self.opt.batch_size, shuffle=True,
+                                         num_workers=self.opt.num_workers,
+                                         pin_memory=False if self.opt.num_workers < 4 else True)
+            yield data_loader

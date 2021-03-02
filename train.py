@@ -9,6 +9,7 @@
 2021/1/24 13:48   jianbingxia     1.0    
 '''
 import logging
+import os
 
 from sklearn.utils import Bunch
 
@@ -56,7 +57,7 @@ def fit(opt,
     for epoch in range(opt.epoch_start, opt.n_epochs + opt.n_epochs_decay + 1):  # outer loop for different epochs;
         epoch_start_time = time.time()  # timer for entire epoch
 
-        for i, data in enumerate(train_dataset):  # inner loop within one epoch
+        for data in train_dataset:  # inner loop within one epoch
             previous_data = PseudoData(Bunch(**data))
             model.set_data(previous_data)
             model.test(visualizer=visualizer)  # Get model.output
@@ -67,7 +68,7 @@ def fit(opt,
             data = PseudoData(previous_data, model.output, task_index)  #
 
             # logging.debug("after:"+str(data))
-            assert all(data.target[task_index] == previous_data.target)
+            # assert all(data.target[task_index] == previous_data.target)
             # set data and fit
             model.set_data(data)  # unpack _data from dataset and apply preprocessing
             model.train(task_index)
@@ -76,7 +77,7 @@ def fit(opt,
         if epoch % opt.curve_freq == 0:  # visualizing training losses and save logging information to the disk
             visualizer.add_losses(train_losses, epoch)
         # Validation
-        val_matrix_item = val(opt, val_dataset, model, task_index, visualizer)
+        val_matrix_item: MatrixItem = val(val_dataset, model, task_index, visualizer)
 
         if (epoch + 1) % opt.save_epoch_freq == 0:  # cache our model every <save_epoch_freq> epochs
             logging.info('saving the model at the end of epoch %d' % (epoch))
@@ -86,7 +87,8 @@ def fit(opt,
             logging.info(f'saving the best model at the end of epoch {epoch}')
             model.save_networks(epoch="best")
 
-        logging.info(f'End of epoch {epoch} / {opt.n_epochs + opt.n_epochs_decay} \t train_loss={train_losses["loss_total"].item()}, Time Taken: {time.time() - epoch_start_time} sec' )
+        logging.info(
+            f'End of epoch {epoch} / {opt.n_epochs + opt.n_epochs_decay} \t train_loss={train_losses["loss_total"].item()},val:{val_matrix_item}, Time Taken: {time.time() - epoch_start_time} sec')
         model.update_learning_rate()  # update learning rates at the end of every epoch.
 
 
@@ -120,26 +122,23 @@ def test(opt, test_datasets, model: BaseModel, train_index, visualizer=None):
     """
 
     for test_index, test_dataset in enumerate(test_datasets):
-        matrixItem = val(opt, test_dataset, model, test_index, visualizer, )
+        matrixItem = val(test_dataset, model, test_index, visualizer, )
         test_matrix[(train_index, test_index)] = matrixItem
 
 
-def val(opt, val_dataset, model: BaseModel, task_index, visualizer=None) -> MatrixItem:
+def val(val_dataset, model: BaseModel, task_index, visualizer=None) -> MatrixItem:
     """for validation on one task"""
     logging.info(f"Validating task {task_index}")
     start_time = time.time()  # timer for validate a task
 
     matrixItems = []
     for i, data in enumerate(val_dataset):  # inner loop within one epoch
-        # if is_gpu_avaliable(opt):
-        #     model.cuda()
-        # Get output
         model.set_data(PseudoData(Bunch(**data)))
         model.test(visualizer)
         # Add matrixItem result
         matrixItems.append(model.get_matrix_item(task_index))
 
-    res = sum(matrixItems, MatrixItem()(0))
+    res = sum(matrixItems, MatrixItem()(accuracy=0, loss=0))
     res = res / len(matrixItems)
     logging.info(f"Validation Time Taken: {time.time() - start_time} sec")
     return res
@@ -178,5 +177,5 @@ if __name__ == '__main__':
               visualizer=visualizer,
               )
         test(opt, test_datasets, model, train_index=task_index, visualizer=visualizer)
-    test_matrix.save_matrix(f'{opt.name}.xlsx')
 
+    test_matrix.save_matrix(os.path.join(opt.result_dir, f'{opt.name}.xlsx'))

@@ -11,9 +11,8 @@
 import functools
 import logging
 
-import torch
 from torch import nn
-from torch.nn import init, DataParallel
+from torch.nn import init
 from torch.optim import lr_scheduler
 
 from util.util import MultiOutput
@@ -85,7 +84,6 @@ def create_net(opt):
     """
     net = find_net_using_name(opt.net_name)
     instance = net(opt)
-    instance = init_net(opt, instance)
     logging.info("net [%s] was created" % type(instance).__name__)
     return instance
 
@@ -105,7 +103,6 @@ class MultiOutputClassifier(nn.Module):
 
         self.num_classes = num_classes
         self.in_features = in_features
-
         self.target_outputs = [nn.Linear(in_features, num_class) for num_class in num_classes]
         self.nb_tasks = len(num_classes)
 
@@ -231,20 +228,3 @@ def _init_weights(net, init_type='normal', init_gain=0.02):
     net.apply(init_func)  # apply the initialization function <init_func>
 
 
-def init_net(opt, net):
-    """Initialize a network: 1. register CPU/GPU device (with multi-GPU support); 2. initialize the network weights
-    Parameters:
-        net (network)      -- the network to be initialized
-        init_type (str)    -- the tag of an initialization method: normal | xavier | kaiming | orthogonal
-        gain (float)       -- scaling factor for normal, xavier and orthogonal.
-        gpu_ids (int list) -- which GPUs the network runs on: e.g., 0,1,2
-
-    Return an initialized network.
-    """
-    if len(opt.gpu_ids) > 0:
-        assert (torch.cuda.is_available())
-        net.cuda()
-        net = DataParallel(net, opt.gpu_ids)  # multi-GPUs
-        # net = net.module
-    _init_weights(net, opt.init_type, init_gain=opt.init_gain)
-    return net

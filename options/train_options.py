@@ -26,7 +26,7 @@ class TrainOptions(BaseOptions):
 
         parser.add_argument('--batch_size', type=int, default=2, help='input batch size')
         parser.add_argument('--num_workers', type=int, default=0 if "Windows" in platform.platform() else 8,
-                            help='num workers for _data prep')
+                            help='num workers for data reading, if set value >= 4, the pin_memory will be True, otherwise, it will be False')
 
         parser.add_argument('--save_best', type=bool, default=True, help='if save the best model or not')
         parser.add_argument('--load_epoch', type=str, default='best',
@@ -62,5 +62,6 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--lr_decay_iters', type=int, default=50,
                             help='multiply by a gamma every lr_decay_iters iterations')
 
+        parser.add_argument('--result_dir', type=str, default='./results/', help='saves results here.')
         self.isTrain = True
         return parser

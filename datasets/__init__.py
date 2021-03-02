@@ -13,19 +13,19 @@ See our template dataset class 'template_dataset.py' for more details.
 import importlib
 import logging
 import os
+from collections import defaultdict
 
 import numpy as np
+import torch
 import torchvision.transforms as transforms
 from PIL import Image
 from torch.utils import data
-from torch.utils.data import DataLoader
 
 from datasets.base_dataset import BaseDataset
-from util.util import flat_iterators
 
-dataset_names = [dir.replace("_", "").replace("dataset.py", "").lower() for dir in os.listdir('datasets/') if
-                 "_dataset" in dir and "base" not in dir]
-
+dataset_names = [dir.replace("_dataset.py", "").lower() for dir in
+                 os.listdir(os.path.dirname(os.path.abspath(__file__))) if
+                 "_dataset.py" in dir and "base" not in dir]
 
 def find_dataset_using_name(dataset_name):
     """Import the module "_data/[dataset_name]_dataset.py".
@@ -60,10 +60,15 @@ def get_option_setter(dataset_name):
 class SimpleDataset(data.Dataset):
     """Get Task-Labeled DataItem accroding to the index inside original dataset"""
 
-    def __init__(self, data_index, dataset):
+    def __init__(self, data_index, dataset, shuffle=False):
         self._data_index = data_index
         self._dataset = dataset
         self.data_name = dataset.data_name
+        self.shuffle = shuffle
+
+        if self.shuffle:
+            import random
+            random.shuffle(self._data_index)
 
     def __getitem__(self, item):
         index = self._data_index[item]
@@ -71,23 +76,6 @@ class SimpleDataset(data.Dataset):
 
     def __len__(self):
         return len(self._data_index)
-
-
-def create_splited_datasets(opt, phase, dataset_name, nb_tasks):
-    """create task_datasets on <dataset_name>, which has split into number of <nb_tasks>
-
-    Return Dataloader of (SimpleDataset_of_task0, SimpleDataset_of_task1, ...)
-
-    """
-    dataset = find_dataset_using_name(dataset_name)(opt, phase)
-    labelsOnTask = dataset.split2n_on_tasks(nb_tasks)
-    for task_index, labels in enumerate(labelsOnTask):
-        data_indices = flat_iterators((dataset(label) for label in labels))
-        yield DataLoader(SimpleDataset(data_indices, dataset),
-                         batch_size=opt.batch_size,
-                         shuffle=True,
-                         num_workers=opt.num_workers,
-                         pin_memory=False)
 
 
 def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, convert=True):
@@ -200,3 +188,27 @@ def __print_size_warning(ow, oh, w, h):
         logging.warning(
             f"The loaded image size was ({ow}, {oh}), so it was adjusted to ({w}, {h}).This adjustment will be done to all label2ImagePaths")
         __print_size_warning.has_printed = True
+
+
+def prepare_datas_by_standard_data(d: 'torchvision.datasets.XXXX'):
+    """
+    Returns:
+        data, list(Bunch(image,target))
+        labels, list(str)
+        label2Indices, {str:list(int),}
+        label2target, {str:int}
+
+    """
+
+    data = d
+    labels = d.classes
+    label2target = d.class_to_idx
+    target2label = dict([(target, label) for label, target in label2target.items()])
+
+    label2Indices = defaultdict(list)
+    for index, target in enumerate(d.targets):
+        if isinstance(target, torch.Tensor):
+            target = target.item()
+        label2Indices[target2label[target]].append(index)
+
+    return data, labels, label2Indices, label2target
