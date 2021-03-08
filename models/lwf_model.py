@@ -1,10 +1,8 @@
 import torch
-from apex import amp
 
 from losses import create_loss
 from models.base_model import BaseModel
 from networks import create_net
-from task_datasets import PseudoData
 
 
 class LwfModel(BaseModel):
@@ -70,75 +68,8 @@ class LwfModel(BaseModel):
         self.plus_other_loss = True
         self.need_backward = False
 
-    def __getattr__(self, item):
-        if "loss" in item and hasattr(self.loss_criterion, item):
-            return getattr(self.loss_criterion, item)
-        for net in self._get_all_nets():
-            if "net" in item and hasattr(net, item):
-                return getattr(net, item)
-        raise AttributeError(f"'LwfModel' object has no attribute '{item}'")
-
-    def set_data(self, data: PseudoData):
-        """Unpack input _data from the dataloader and perform necessary pre-processing steps.
-        """
-        self.image = data.image
-        self.target = data.target
-        if not self.image.is_cuda:
-            self.image = self.image.cuda()
-        if not self.target.is_cuda:
-            self.target = self.target.cuda()
-
-    def forward(self):
-        """Run forward pass. This will be called by both functions <optimize_parameters> and <test>."""
-        if self.image is None:
-            raise ValueError(f"Expected model.set_data(data) be called before forward(), to get data")
-        self.output = self.net_main(self.image)
-
-    # @torchsnooper.snoop()
-    def backward(self, task_index):
-        """Calculate losses_without_lambda, gradients, and update network weights; called in every training iteration"""
-        # caculate the intermediate results if necessary; here self.output has been computed during function <forward>
-        # calculate loss given the input and intermediate results
-        self.loss_total = self.loss_criterion(self.output, self.target, task_index)
-        with amp.scale_loss(self.loss_total, self.optimizer) as scaled_loss:
-            scaled_loss.backward()
-
-    def optimize_parameters(self, task_index):
-        """Update network weights; it will be called in every training iteration."""
-
-        self.optimizer.zero_grad()  # clear network's existing gradients
-        self.backward(task_index)  # calculate gradients for network main
-        self.optimizer.step()  # update gradients for network
-
     def train(self, task_index):
         self.set_requires_grad(self.net_main.module.multi_output_classifier.other_layers(task_index),
                                requires_grad=True)
         self.set_requires_grad(self.net_main.module.multi_output_classifier.task_layer(task_index), requires_grad=True)
         BaseModel.train(self, task_index)  # call the initialization method of BaseModel
-
-    @property
-    def continued_task_index(self):
-        return self._continued_task_index
-
-    @continued_task_index.setter
-    def continued_task_index(self, value):
-        self._continued_task_index = value
-        self.loss_criterion.continued_task_index = value
-
-    @property
-    def plus_other_loss(self):
-        return self._plus_other_loss
-
-    @plus_other_loss.setter
-    def plus_other_loss(self, value):
-        self._plus_other_loss = value
-        self.loss_criterion.plus_other_loss = value
-
-    def _get_all_nets(self):
-        nets = self.__dict__
-        return [nets["net_" + net_name] for net_name in self.net_names]
-
-    def compute_visuals(self, visualizer):
-        """Calculate additional visualization"""
-
-        pass

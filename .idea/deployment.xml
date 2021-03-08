@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" promptOnRemoteOverwrite="CHECK_TIMESTAMP" serverName="#66" uploadOnCheckin="c42bba53-9b1d-43ba-b874-a122538e848c" exclude=".svn;.cvs;.idea;.DS_Store;.git;.hg;*.hprof;*.pyc;*.xlsx;*.txt;data;output;checkpoints;logs;*.log" remoteFilesAllowedToDisappearOnAutoupload="false" notifyRemoteChanges="true">
+  <component name="PublishConfigData" autoUpload="Always" promptOnRemoteOverwrite="CHECK_TIMESTAMP" serverName="#37" uploadOnCheckin="c42bba53-9b1d-43ba-b874-a122538e848c" exclude=".svn;.cvs;.idea;.DS_Store;.git;.hg;*.hprof;*.pyc;*.xlsx;*.txt;data;output;checkpoints;logs;*.log" remoteFilesAllowedToDisappearOnAutoupload="false" notifyRemoteChanges="true" showAutoUploadSettingsWarning="false">
     <serverData>
       <paths name="#37">
         <serverdata>

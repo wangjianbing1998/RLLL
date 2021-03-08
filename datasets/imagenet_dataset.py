@@ -93,8 +93,8 @@ class ImagenetDataset(BaseDataset):
         target = torch.from_numpy(np.array(target, dtype=np.float))
 
         if is_gpu_avaliable(self.opt):
-            image = image.cuda()
-            target = target.cuda()
+            image = image.to(self.opt.device)
+            target = target.to(self.opt.device)
         return Bunch(image_name=image_name,
                      image=image,
                      target=target)

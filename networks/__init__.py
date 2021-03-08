@@ -15,8 +15,6 @@ from torch import nn
 from torch.nn import init
 from torch.optim import lr_scheduler
 
-from util.util import MultiOutput
-
 """This package contains networks related to objective functions, and network architectures.
 
 To add a custom net_main class called 'dummy', you need to add a file called 'dummy_net.py' and define a subclass DummyNet inherited from BaseNet.
@@ -98,18 +96,17 @@ class MultiOutputClassifier(nn.Module):
     self.output: total output, [batch_size,num_class*nb_tasks]
     """
 
-    def __init__(self, in_features, num_classes):
+    def __init__(self, opt, in_features, num_classes):
         super(MultiOutputClassifier, self).__init__()
-
+        self.opt = opt
         self.num_classes = num_classes
         self.in_features = in_features
-        self.target_outputs = [nn.Linear(in_features, num_class) for num_class in num_classes]
+        self.target_outputs = nn.ModuleList([nn.Linear(in_features, num_class) for num_class in num_classes])
         self.nb_tasks = len(num_classes)
 
     def forward(self, input):
         task_outputs = [target_output(input) for target_output in self.target_outputs]
-        multi_output = MultiOutput(task_outputs)
-        return multi_output
+        return task_outputs
 
     def _split_output2n(self, output):
         c = [0]
@@ -131,9 +128,12 @@ class MultiOutputClassifier(nn.Module):
             if index == task_index:
                 return classifier
 
-    def cuda(self):
-        [target_output.cuda() for target_output in self.target_outputs]
-        super(MultiOutputClassifier,self).cuda()
+    def cuda(self, device=None):
+        if device is None:
+            device = self.opt.device
+        self.target_outputs = [target_output.to(device) for target_output in self.target_outputs]
+        # super(MultiOutputClassifier, self).to(device)
+        self.to(device)
 
 
 class Identity(nn.Module):
@@ -226,5 +226,3 @@ def _init_weights(net, init_type='normal', init_gain=0.02):
 
     logging.info('initialize network with %s' % init_type)
     net.apply(init_func)  # apply the initialization function <init_func>
-
-

@@ -177,6 +177,7 @@ def seed_everything(seed):
     """
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
+    os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -225,12 +226,11 @@ class MultiOutput(object):
     """
 
     def __repr__(self):
-        return f'MultiOutput output={self.output.shape}'
+        return f'MultiOutput({self.nb_outputs}: [{["(" + task_output.shape + ")" for task_output in self.task_outputs]}])'
 
     def __init__(self, task_outputs: []):
-        self.nb_tasks = len(task_outputs)
         self.task_outputs = task_outputs
-        self.output = torch.cat(task_outputs, dim=1)
+        self.nb_outputs = len(self.task_outputs)
 
     def __getitem__(self, task_index):
         return self.task_outputs[task_index]
@@ -238,22 +238,11 @@ class MultiOutput(object):
     def __setitem__(self, task_index, output):
         self.task_outputs[task_index] = output
 
-    def __call__(self, *args, **kwargs):
-        return self
+    def __len__(self):
+        return self.nb_outputs
 
-    @property
-    def is_cuda(self):
-        return self.output.is_cuda and all([task_output.is_cuda for task_output in self.task_outputs])
-
-    def cuda(self):
-        self.output = self.output.cuda()
-        self.task_outputs = [task_output.cuda() for task_output in self.task_outputs]
-        return self
-
-    def __getattr__(self, item):
-        if hasattr(self.output, item):
-            return self.output.item
-        raise ValueError(f"AttributeError, MultiOutput.{item} not found")
+    def cuda(self, device):
+        self.task_outputs = [task_output.cuda(device) for task_output in self.task_outputs]
 
 
 class MatrixItem(object):
@@ -262,13 +251,13 @@ class MatrixItem(object):
     def __repr__(self):
         return f'loss={self.loss},acc={self.accuracy}'
 
-    def __init__(self, preds=None, gts=None, loss_criterion=None, task_index=None):
+    def __init__(self, preds=None, gts=None, loss_criterion=None):
         self.accuracy = 0
         self.loss = 0
         if preds is not None and gts is not None:
             self.accuracy = self.__cal_accuracy(preds, gts)
-            self.loss = loss_criterion(preds, gts, task_index)
-            self.loss = self.loss.item()
+            loss = loss_criterion(preds, gts)
+            self.loss = loss.item()
 
     def __add__(self, other):
         accuracy = self.accuracy + other.accuracy
@@ -297,7 +286,7 @@ class MatrixItem(object):
             (max_vals, arg_maxs) = torch.max(preds.data, dim=1)
         gts.squeeze_()
         num_correct = torch.sum(gts == arg_maxs.long())
-        acc = (num_correct * 100.0 / len(gts))
+        acc = (num_correct * 100.0 / len(preds))
         return acc.item()
 
 
@@ -349,8 +338,18 @@ def is_gpu_avaliable(opt):
     return len(opt.gpu_ids) > 0 and torch.cuda.is_available()
 
 
+def is_new_distributed_avaliable(opt):
+    """for newly DistributedDataParallel"""
+    return is_gpu_avaliable(opt) and torch.distributed.is_available() and opt.use_distributed == 'new'
+
+
+def is_old_distributed_avaliable(opt):
+    """for old DistributedDataParallel"""
+    return is_gpu_avaliable(opt) and torch.distributed.is_available() and opt.use_distributed == 'old'
+
+
 def is_distributed_avaliable(opt):
-    return is_gpu_avaliable(opt) and torch.distributed.is_available()
+    return is_new_distributed_avaliable(opt) or is_old_distributed_avaliable(opt)
 
 
 def unsqueeze0(data: Bunch):
@@ -359,7 +358,10 @@ def unsqueeze0(data: Bunch):
 
 
 def un_onehot(target: torch.Tensor):
-    if len(target.shape) == 1:
+    if len(target.shape) == 0:
+        target = torch.unsqueeze(target, dim=0)
+        return target.long()
+    elif len(target.shape) == 1:
         return target.long()
     elif len(target.shape) == 2:
         return target.argmax(dim=1).long()
@@ -396,3 +398,33 @@ def get_log_level(level: str) -> int:
     else:
         raise ValueError(f'Expected debug|info|warning|warn|error|critical|fatal, but got {level}')
     return level
+
+
+def relabel(targets):
+    '''
+    re-code the targets into range(0,len(targets))
+    Args:
+        targets:
+
+    Returns:
+        recoded target2index
+
+    >>> relabel([1,5,3,6,7])
+    {1: 0, 5: 1, 3: 2, 6: 3, 7: 4}
+    '''
+    target2index = dict([(label, index) for index, label in enumerate(targets)])
+    return target2index
+
+
+def load_best_ckptname(ckpts_path):
+    ls = []
+    for file in os.listdir(ckpts_path):
+        task_index, epoch, *others = file.split('_')
+        ls.append((int(task_index), float(epoch.replace('best', float('inf')))))
+    if len(ls) == 0:
+        logging.warning(f'NotFoundBestCheckpoint at {ckpts_path}')
+        return None, None
+    best_taskindex, best_epoch = max(ls)
+    if best_epoch == float('inf'):
+        best_epoch = 'best'
+    return int(best_taskindex), str(best_epoch)

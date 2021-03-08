@@ -22,10 +22,12 @@ from PIL import Image
 from torch.utils import data
 
 from datasets.base_dataset import BaseDataset
+from util.util import relabel
 
 dataset_names = [dir.replace("_dataset.py", "").lower() for dir in
                  os.listdir(os.path.dirname(os.path.abspath(__file__))) if
                  "_dataset.py" in dir and "base" not in dir]
+
 
 def find_dataset_using_name(dataset_name):
     """Import the module "_data/[dataset_name]_dataset.py".
@@ -60,7 +62,7 @@ def get_option_setter(dataset_name):
 class SimpleDataset(data.Dataset):
     """Get Task-Labeled DataItem accroding to the index inside original dataset"""
 
-    def __init__(self, data_index, dataset, shuffle=False):
+    def __init__(self, data_index, dataset, labels, shuffle=False):
         self._data_index = data_index
         self._dataset = dataset
         self.data_name = dataset.data_name
@@ -70,9 +72,19 @@ class SimpleDataset(data.Dataset):
             import random
             random.shuffle(self._data_index)
 
+        self._relabels = relabel(labels)
+
+    @property
+    def relabels(self):
+        return self._relabels
+
+    @relabels.setter
+    def relabels(self, value):
+        self._relabels = value
+
     def __getitem__(self, item):
         index = self._data_index[item]
-        return self._dataset[index]
+        return self._dataset[(index, self._relabels)]
 
     def __len__(self):
         return len(self._data_index)
@@ -211,4 +223,4 @@ def prepare_datas_by_standard_data(d: 'torchvision.datasets.XXXX'):
             target = target.item()
         label2Indices[target2label[target]].append(index)
 
-    return data, labels, label2Indices, label2target
+    return data, labels, label2Indices, label2target, target2label

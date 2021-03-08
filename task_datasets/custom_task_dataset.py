@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from datasets import SimpleDataset, find_dataset_using_name
 from task_datasets import dataname2taskindex
 from task_datasets.base_task_dataset import BaseTaskDataset
-from util.util import log, flat_iterators, is_distributed_avaliable
+from util.util import log, flat_iterators, is_new_distributed_avaliable
 
 
 class CustomTaskDataset(BaseTaskDataset):
@@ -77,13 +77,14 @@ class CustomTaskDataset(BaseTaskDataset):
         labelsOnTask = dataset.split2n_on_tasks(self.nb_tasks)
         for task_index, labels in enumerate(labelsOnTask):
             data_indices = flat_iterators((dataset(label) for label in labels))
-            simple_dataset = SimpleDataset(data_indices, dataset)
-            if is_distributed_avaliable(self.opt):
+            simple_dataset = SimpleDataset(data_indices, dataset, labels, shuffle=True)
+            if is_new_distributed_avaliable(self.opt):
                 data_sampler = torch.utils.data.distributed.DistributedSampler(simple_dataset)
                 data_loader = DataLoader(simple_dataset, batch_size=self.opt.batch_size,
                                          num_workers=self.opt.num_workers,
                                          sampler=data_sampler)
             else:
+                # for old-distributed-data and none-distributed-data
                 data_loader = DataLoader(simple_dataset, batch_size=self.opt.batch_size, shuffle=True,
                                          num_workers=self.opt.num_workers,
                                          pin_memory=False if self.opt.num_workers < 4 else True)

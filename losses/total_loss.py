@@ -70,27 +70,37 @@ class TotalLoss(BaseLoss):
             """get <MultiOutput> loss"""
             task_preds, task_gts = lambda x:(preds[x]), lambda x:(gts[x])
             self.losses_without_lambda = []
+            self.loss_need_index = []
             for i in range(self.continued_task_index + 1):
                 if i != task_index:
                     if self._plus_other_loss:
-                        self.losses_without_lambda.append(self.kd_loss(task_preds(i), task_gts(i)))
+                        self.losses_without_lambda.append(self.kd_loss(task_preds(i), task_gts(i)).cuda())
+                        self.loss_need_index.append(i)
                     else:
                         self.losses_without_lambda.append(torch.FloatTensor([0]).cuda())
                 else:
-                    self.losses_without_lambda.append(self.ce_loss(task_preds(i), un_onehot(task_gts(i))))
+                    self.losses_without_lambda.append(self.ce_loss(task_preds(i), un_onehot(task_gts(i))).cuda())
+                    self.loss_need_index.append(i)
 
-            self.losses_with_lambda = [loss * lambda_ for loss, lambda_ in
+            self.losses_with_lambda = [(loss * lambda_).to(self.opt.device) for loss, lambda_ in
                                        zip(self.losses_without_lambda, self.lambda_all)]
             self.loss_total = sum(self.losses_with_lambda)
             logging.debug(
                 f"total_loss={self.loss_total.item()}, losses_with_lambda={tensors2str(self.losses_with_lambda)}, losses_without_lambda={tensors2str(self.losses_without_lambda)}")
+            return self.loss_total, [self.losses_without_lambda[index] for index in self.loss_need_index]
+
         else:
             """get current task ce-loss"""
+            self.loss_need_index = []
             self.losses_without_lambda = None
             self.losses_with_lambda = None
-            self.loss_total = self.ce_loss(preds, un_onehot(gts))
-        return self.loss_total
+            targets = un_onehot(gts)
+            self.loss_total = self.ce_loss(preds, targets)
+            return self.loss_total
 
-    def cuda(self, device):
-        self.kd_loss.cuda(device)
-        self.ce_loss.cuda(device)
+    def cuda(self, device=None):
+        if device is None:
+            device = self.opt.device
+
+        self.kd_loss = self.kd_loss.to(device)
+        self.ce_loss = self.ce_loss.to(device)

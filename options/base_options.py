@@ -2,12 +2,14 @@ import argparse
 import logging
 import os
 
+import torch
+
 import datasets
 import losses
 import models
 import networks
 import task_datasets
-from util.util import rmdirs, get_log_level
+from util.util import rmdirs, get_log_level, seed_everything, load_best_ckptname
 
 
 class BaseOptions(object):
@@ -26,6 +28,8 @@ class BaseOptions(object):
         """Define the common options that are used in both training and test."""
 
         # Multi-GPUs Distributed
+        parser.add_argument('--use_distributed', type=str, default='new', choices=['new', 'old', 'none'],
+                            help='if use newly distributed GPUs calculating for apex.DistributedDataParallel, or old for `DataParallelModel` or none for DataParallel')
         parser.add_argument('--init_method', type=str, default="tcp://127.0.0.1:46622",
                             help='the main machine or process ip:port, all machine or process is same as the main one')
         parser.add_argument('--rank', type=int, default=0, help='rank of current machine or process')
@@ -44,6 +48,7 @@ class BaseOptions(object):
         # basic parameters
         parser.add_argument('--name', type=str, default='',
                             help='name of the experiment. opt.name=opt.model_name+"_"+opt.dataset_list')
+        parser.add_argument('--device', type=str, default='cuda:0', help='cuda:0 or cpu')
         parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
         parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='models are saved here')
         parser.add_argument('--logs_dir', type=str, default='./logs',
@@ -128,15 +133,23 @@ class BaseOptions(object):
     def parse(self):
         """Parse our options, create checkpoints directory suffix, and set up gpu device."""
         opt = self.gather_options()
-        opt.num_classes = task_datasets.get_num_classes_by_data_list(opt.dataset_list)  # initialize num_classes
-        opt.isTrain = self.isTrain  # fit or test
+        # seed and torch.backends
+        seed_everything(opt.seed)
+
+        # format input
+        opt.use_distributed = opt.use_distributed.lower()
+        opt.log_filename = opt.log_filename.strip().lower()
+
+        # initialize num_classes, get info from dataset_list, and it will be used in networks
+        opt.num_classes = task_datasets.get_num_classes_by_data_list(opt.dataset_list)
+
+        opt.isTrain = self.isTrain  # train or test
         opt.name = opt.model_name + "_" + "-".join(opt.dataset_list)
         # process opt.suffix
         if opt.suffix:
             opt.name = opt.name + "_" + opt.suffix
 
-        opt.log_filename = opt.log_filename.strip().lower()
-
+        # log_filename
         if opt.log_filename != 'none':
             opt.log_filename = opt.log_filename.format(f'{opt.preffix}_{opt.name}')
             if "output" in opt.dels and os.path.isfile(opt.log_filename):
@@ -165,11 +178,15 @@ class BaseOptions(object):
         os.makedirs(opt.checkpoints_dir, exist_ok=True)
         os.makedirs(opt.logs_dir, exist_ok=True)
 
+        load_taskindex, load_epoch = load_best_ckptname(opt.checkpoints_dir)
+        if opt.load_taskindex == 0 and load_taskindex is not None:
+            opt.load_taskindex = load_taskindex
+        if opt.load_epoch == 'best' and load_epoch is not None:
+            opt.load_epoch = load_epoch
+
         self.print_options(opt)
 
-        # set gpu ids
-        os.environ["CUDA_VISIBLE_DEVICES"] = opt.gpu_ids
-
+        # set GPUs
         str_ids = opt.gpu_ids.split(',')
         opt.gpu_ids = []
         for str_id in str_ids:
@@ -177,5 +194,12 @@ class BaseOptions(object):
             if id >= 0:
                 opt.gpu_ids.append(id)
 
+        # set gpu ids
+        # os.environ["CUDA_VISIBLE_DEVICES"] = opt.gpu_ids #当指定这个的时候，比如gpu_ids=[1,2], 那系统会把1当做0,2当做1，则在DataParallel中的device_ids就是[0,1]才可以，而不能是[1,2]
+        if min(opt.gpu_ids) >= 0:
+            torch.cuda.set_device(min(opt.gpu_ids))  # 这样就不会出现那种问题
+
+        opt.device = torch.device('cuda:{}'.format(opt.gpu_ids[0])) if opt.gpu_ids else torch.device(
+            'cpu')  # get device tag: CPU or GPU
         self.opt = opt
         return self.opt

@@ -1,17 +1,19 @@
 import logging
 import os
 from abc import ABC
-from abc import abstractmethod
 from collections import OrderedDict
 
 import torch
+from apex import amp
 # torch.multiprocessing.set_start_method('spawn')
 from apex.parallel import DistributedDataParallel
+from torch.nn import DataParallel
 
 from networks import get_scheduler, _init_weights
 from task_datasets import PseudoData
 from util.data_parallel_util import DataParallelModel, DataParallelCriterion
-from util.util import MatrixItem, is_gpu_avaliable, is_distributed_avaliable
+from util.util import MatrixItem, is_gpu_avaliable, is_new_distributed_avaliable, is_old_distributed_avaliable,\
+    is_distributed_avaliable, MultiOutput
 
 
 class BaseModel(ABC):
@@ -20,8 +22,7 @@ class BaseModel(ABC):
         self.opt = opt
         self.gpu_ids = opt.gpu_ids
         self.isTrain = opt.isTrain
-        self.device = torch.device('cuda:{}'.format(self.gpu_ids[0])) if self.gpu_ids else torch.device(
-            'cpu')  # get device tag: CPU or GPU
+
         self.save_dir = opt.checkpoints_dir  # save all the checkpoints to save_dir
 
         self.loss_names = []
@@ -58,35 +59,6 @@ class BaseModel(ABC):
 
         return parser
 
-    @abstractmethod
-    def forward(self):
-        """self.output = self.net_main(self.image), to input the image and get the output"""
-        pass
-
-    @abstractmethod
-    def set_data(self, data: PseudoData):
-        """Unpack input _data from the dataloader and perform necessary pre-processing steps.
-
-        Parameters:
-            data (dict): includes the _data itself and its metadata information.
-        """
-        pass
-
-    @abstractmethod
-    def optimize_parameters(self, task_index):
-        """Calculate losses_without_lambda, gradients, and update network weights; called in every training iteration"""
-        pass
-
-    @abstractmethod
-    def compute_visuals(self, visualizer):
-        """Calculate additional visualization"""
-        pass
-
-    @abstractmethod
-    def _get_all_nets(self):
-        """return all networks, return type is [Net,...]"""
-        pass
-
     def setup(self, opt):
         """Load and print networks; create schedulers
 
@@ -97,7 +69,7 @@ class BaseModel(ABC):
             self.schedulers = [get_scheduler(optimizer, opt) for optimizer in self.optimizers]
 
         if not self.isTrain or opt.continue_train:
-            self.load_networks(opt.load_epoch)
+            self.load_networks(opt.load_taskindex, opt.load_epoch)
         self.print_networks(repeat=False)
 
     def eval(self):
@@ -151,45 +123,50 @@ class BaseModel(ABC):
                 errors_ret[name] = getattr(self, name)  # float(...) works for both scalar tensor and float number
         return errors_ret
 
-    def save_networks(self, epoch):
+    def save_networks(self, task_index, epoch):
         """Save all the networks to the disk.
 
         Parameters:
-            epoch (Union[int,str]) -- current epoch; used in the file tag '%s_net_%s.pth' % (epoch, tag)
+            task_index (int) -- current trained task_index
+            epoch (Union[int,str]) -- current epoch; used in the file tag '%s_%s_net_%s.pth' % (task_index,epoch, tag)
         """
         for name in self.net_names:
             if isinstance(name, str):
-                save_filename = '%s_net_%s.pth' % (epoch, name)
+                save_filename = '%s_%s_net_%s.pth' % (task_index, epoch, name)
                 save_path = os.path.join(self.save_dir, save_filename)
                 net = getattr(self, "net_" + name)
                 if is_gpu_avaliable(self.opt):
                     torch.save(net.module.cpu().state_dict(), save_path)
-                    net.cuda()
+                    net.to(device=self.opt.device)
                 else:
                     torch.save(net.cpu().state_dict(), save_path)
 
-    def load_networks(self, epoch):
+    def load_networks(self, taks_index, epoch):
         """Load all the networks from the disk.
 
         Parameters:
-            epoch (int or str) -- current epoch or best epoch; used in the file tag '%s_net_%s.pth' % (epoch, tag)
+            task_index (int) -- current trained task_index
+            epoch (int or str) -- current epoch or best epoch; used in the file tag '{taks_index}_{epoch}_net_{name}.pth' % (epoch, tag)
         """
         for name in self.net_names:
             if isinstance(name, str):
-                load_filename = f'{epoch}_net_{name}.pth'
+                load_filename = f'{taks_index}_{epoch}_net_{name}.pth'
                 load_path = os.path.join(self.save_dir, load_filename)
-                net = getattr(self, "net_" + name)
-                if isinstance(net, torch.nn.DataParallel):
-                    net = net.module
-                logging.info('loading the model from %s' % load_path)
-                state_dict = torch.load(load_path, map_location=str(self.device))
-                if hasattr(state_dict, '_metadata'):
-                    del state_dict._metadata
+                if not os.path.exists(load_path):
+                    logging.warning(f'checkpoint path {load_path} is not exists, please checkout it!')
+                else:
+                    net = getattr(self, "net_" + name)
+                    if isinstance(net, torch.nn.DataParallel):
+                        net = net.module
+                    logging.info('loading the model from %s' % load_path)
+                    state_dict = torch.load(load_path, map_location=str(self.opt.device))
+                    if hasattr(state_dict, '_metadata'):
+                        del state_dict._metadata
 
-                # patch InstanceNorm checkpoints prior to 0.4
-                for key in list(state_dict.keys()):  # need to copy keys here because we mutate in loop
-                    self.__patch_instance_norm_state_dict(state_dict, net, key.split('.'))
-                net.load_state_dict(state_dict)
+                    # patch InstanceNorm checkpoints prior to 0.4
+                    for key in list(state_dict.keys()):  # need to copy keys here because we mutate in loop
+                        self.__patch_instance_norm_state_dict(state_dict, net, key.split('.'))
+                    net.load_state_dict(state_dict)
 
     def __patch_instance_norm_state_dict(self, state_dict, module, keys, i=0):
         """Fix InstanceNorm checkpoints incompatibility (prior to 0.4)"""
@@ -243,7 +220,7 @@ class BaseModel(ABC):
         if self.output is None or self.target is None:
             raise ValueError(
                 f"Expected model.set_data(data) and model.forward() be called before model.get_matrix_item(), but not called {'forward()' if self.output is None else ''} {'and set_data()' if self.target is None else ''}")
-        return MatrixItem(self.output[task_index], self.target, self.loss_criterion, task_index)
+        return MatrixItem(self.output[task_index], self.target, self.loss_criterion)
 
     def init_net_optimizer_with_apex(self, opt, net, optimizer, criterion):
         """Initialize a network: 1. register CPU/GPU device (with multi-GPU support); 2. initialize the network weights
@@ -255,32 +232,114 @@ class BaseModel(ABC):
 
         Return an initialized network.
         """
-        from apex import amp
 
         if len(opt.gpu_ids) > 0:
             assert (torch.cuda.is_available())
 
-            if is_distributed_avaliable(opt):
+            if is_new_distributed_avaliable(opt):
                 # bn sync, only if distributed is available
                 from apex.parallel import convert_syncbn_model
                 net = convert_syncbn_model(net)
-            net.to(device=self.device)
-            net, optimizer = amp.initialize(net, optimizer,
-                                            opt_level="O1")  # here, the net can be replaced with list of nets
-
-            # net = DataParallel(net, opt.gpu_ids)  # multi-GPUs，最简单但是效果最不好的多GPU方法
 
             if is_distributed_avaliable(opt):
-                torch.distributed.init_process_group(backend='nccl', init_method=opt.init_method, rank=opt.rank,
-                                                     world_size=opt.word_size)
-                net = DistributedDataParallel(net, delay_allreduce=True)  # must be after amp.initialize
+                net.to(device=self.opt.device)
+                net, optimizer = amp.initialize(net, optimizer,
+                                                opt_level="O1")  # here, the net can be replaced with list of nets
+                if is_new_distributed_avaliable(opt):
+                    # for newly distributed data parallel
+                    torch.distributed.init_process_group(backend='nccl', init_method=opt.init_method, rank=opt.rank,
+                                                         world_size=opt.word_size)
+                    net = DistributedDataParallel(net, delay_allreduce=True)  # must be after amp.initialize
 
+                elif is_old_distributed_avaliable(opt):
+                    # for old distributed data parallel
+                    net = DataParallelModel(net, device_ids=opt.gpu_ids)
+                    criterion = DataParallelCriterion(criterion, device_ids=opt.gpu_ids)
+                    criterion = criterion.module
+                else:
+                    raise ValueError(f'Expected normal distributed `use_distributed`, but got {opt.use_distributed}')
             else:
-                net = DataParallelModel(net, device_ids=opt.gpu_ids)
-                criterion = DataParallelCriterion(criterion, device_ids=opt.gpu_ids)
-                criterion = criterion.module
+                # for none distributed data parallel, only DataParallel
+                net = DataParallel(net, device_ids=opt.gpu_ids)
+                net.to(device=self.opt.device)
+
         else:
+            # use CPU
             net, optimizer = amp.initialize(net, optimizer, opt_level="O1")  # 这里多个net就用列表
 
         _init_weights(net, opt.init_type, init_gain=opt.init_gain)
         return net, optimizer, criterion
+
+    def __getattr__(self, item):
+        if "loss" in item and hasattr(self.loss_criterion, item):
+            return getattr(self.loss_criterion, item)
+        for net in self._get_all_nets():
+            if "net" in item and hasattr(net, item):
+                return getattr(net, item)
+        raise AttributeError(f"'LwfModel' object has no attribute '{item}'")
+
+    def set_data(self, data: PseudoData):
+        """Unpack input _data from the dataloader and perform necessary pre-processing steps.
+        """
+        data.cuda(self.opt.device)
+
+        self.image = data.image
+        self.target: MultiOutput = data.target
+
+    def forward(self):
+        """Run forward pass. This will be called by both functions <optimize_parameters> and <test>."""
+        if self.image is None:
+            raise ValueError(f"Expected model.set_data(data) be called before forward(), to get data")
+        task_outputs = self.net_main(self.image)
+        self.output = MultiOutput(task_outputs)
+
+    # @torchsnooper.snoop()
+    def backward(self, task_index):
+        """Calculate losses_without_lambda, gradients, and update network weights; called in every training iteration"""
+        # caculate the intermediate results if necessary; here self.output has been computed during function <forward>
+        # calculate loss given the input and intermediate results
+        self.loss_total, self.losses_without_lambda = self.loss_criterion(self.output, self.target, task_index)
+        if is_distributed_avaliable(self.opt):
+            with amp.scale_loss(self.loss_total, self.optimizer) as scaled_loss:
+                scaled_loss.backward()
+        else:
+            # backward method 1
+            # self.loss_total.backward()
+            # backward method 2
+            for loss in self.losses_without_lambda[:-1]:
+                loss.backward(retain_graph=True)
+            self.losses_without_lambda[-1].backward()
+
+    def optimize_parameters(self, task_index):
+        """Update network weights; it will be called in every training iteration."""
+
+        self.optimizer.zero_grad()  # clear network's existing gradients
+        self.backward(task_index)  # calculate gradients for network main
+        self.optimizer.step()  # update gradients for network
+
+    @property
+    def continued_task_index(self):
+        return self._continued_task_index
+
+    @continued_task_index.setter
+    def continued_task_index(self, value):
+        self._continued_task_index = value
+        self.loss_criterion.continued_task_index = value
+
+    @property
+    def plus_other_loss(self):
+        return self._plus_other_loss
+
+    @plus_other_loss.setter
+    def plus_other_loss(self, value):
+        self._plus_other_loss = value
+        self.loss_criterion.plus_other_loss = value
+
+    def _get_all_nets(self):
+        nets = self.__dict__
+        return [nets["net_" + net_name] for net_name in self.net_names]
+
+    def compute_visuals(self, visualizer):
+        """Calculate additional visualization"""
+
+        pass

@@ -2,11 +2,17 @@
 
 It also includes common transformation functions (e.g., get_transform, __scale_width), which can be later used in subclasses.
 """
-from abc import ABC, abstractmethod
+from abc import ABC
 
+import torch
 import torch.utils.data as data
 
 __all__ = ['BaseDataset']
+
+from PIL.Image import Image
+from sklearn.utils import Bunch
+
+from util.util import is_gpu_avaliable, split2n
 
 
 class BaseDataset(data.Dataset, ABC):
@@ -19,13 +25,15 @@ class BaseDataset(data.Dataset, ABC):
     -- <modify_commandline_options>:    (optionally) add dataset-specific options and set default options.
     """
 
-    def __init__(self, opt):
+    def __init__(self, opt, phase):
         """Initialize the class; save the options in the class
 
         Parameters:
             opt (Option class)-- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
-        self.isTrain = opt.isTrain
+
+        self.isTrain = True if phase == 'train' else False
+        self.phase = phase
         self.opt = opt
         self.data_dir = None  # specified in sub-class
 
@@ -61,19 +69,63 @@ class BaseDataset(data.Dataset, ABC):
 
         return parser
 
-    @abstractmethod
-    def __len__(self):
-        """Return the total number of label2ImagePaths in the dataset."""
-        return 0
+    def __getitem__(self, item):
+        """Get items on label index
 
-    @abstractmethod
-    def __getitem__(self, index):
-        """Return a _data point and its metadata information.
-
-        Parameters:
-            index - - a random integer for _data indexing
-
-        Returns:
-            a dictionary of _data with their names. It ususally contains the _data itself and its metadata information.
         """
-        pass
+        if len(item) == 2:
+            data_index, relabels = item
+        else:
+            raise ValueError(f'relabels assignment error, please check SimpleDataset.__getitem__(item)')
+
+        data = self.data[data_index]
+        if self.opt.load_dataset_mode == 'dir':
+            image_path, target = data.image_path, data.target
+            image = Image.open(image_path)
+
+        elif self.opt.load_dataset_mode == 'reader':
+            image, target = data
+        else:
+            raise ValueError(
+                f'Expected load_dataset_mode choice from dir or reader, but got {self.opt.load_dataset_mode}')
+
+        image = image.convert('RGB')  # need use three channels, instead of one channel
+        if self.x_transforms is not None:
+            image = self.x_transforms(image)
+
+        target = relabels[self.target2label[target]]
+
+        if self.y_transforms is not None:
+            target = self.y_transforms(target)
+        target = torch.LongTensor([target])
+
+        if is_gpu_avaliable(self.opt):
+            image = image.to(self.opt.device)
+            target = target.to(self.opt.device)
+        return Bunch(image=image,
+                     target=target)
+
+    def __len__(self):
+        return len(self.data)
+
+    def __call__(self, label, **kwargs):
+        """MnistDataset()(label) return a variety of indices, not real data"""
+        indices = self.label2Indices[label][:self.opt.max_dataset_size]
+        return indices
+
+    @property
+    def labels(self):
+        return self._labels
+
+    def split2n_on_tasks(self, nb_tasks):
+        """split the dataset into <nb_tasks> splits, on labelsOnTask
+        Examples
+
+        self.labelsOnTask = [labels for i in range(nb_tasks)]
+        nb_tasks=3
+
+        Return
+        str for all([[0,1,2,3],[4,5,6,7],[8,9]])
+        """
+        labelsOnTask = split2n(self.labels, nb_tasks)
+        return labelsOnTask

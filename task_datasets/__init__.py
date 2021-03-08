@@ -157,12 +157,13 @@ class PseudoData(object):
 
     """
 
-    def __init__(self, data, pdatas: MultiOutput = None, task_index=None):
+    def __init__(self, opt, data: 'Bunch', pdatas: MultiOutput = None, task_index=None):
+        self.opt = opt
         self._image = data.image
-        self._target = data.target
+        self._target: 'Single Output' = data.target
         if pdatas is not None:
             pdatas[task_index] = data.target
-            self._target = pdatas
+            self._target: MultiOutput = pdatas
 
     @property
     def image(self):
@@ -175,3 +176,14 @@ class PseudoData(object):
     def __repr__(self):
         return (
             f'PseudoData \n\timage={print_tensor(self._image, pt=False)}\n\ttarget={print_tensor(self._target.output if hasattr(self._target, "output") else self._target, pt=False)}')
+
+    def cuda(self, device=None):
+        if device is None:
+            device = self.opt.device
+        self._image = self._image.to(device)
+        if isinstance(self._target, MultiOutput):
+            # MultiOutput
+            self._target.cuda(device)
+        else:
+            # torch.Tensor
+            self._target = self._target.to(device)

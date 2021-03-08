@@ -41,7 +41,7 @@ def val(opt, val_dataset, model: BaseModel, task_index, visualizer=None) -> Matr
 
     matrixItems = []
     for i, data in enumerate(val_dataset):  # inner loop within one epoch
-        model.set_data(PseudoData(Bunch(**data)))
+        model.set_data(PseudoData(opt, Bunch(**data)))
         model.test(visualizer)
         matrixItems.append(model.get_matrix_item(task_index))
 

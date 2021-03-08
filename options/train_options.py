@@ -29,6 +29,8 @@ class TrainOptions(BaseOptions):
                             help='num workers for data reading, if set value >= 4, the pin_memory will be True, otherwise, it will be False')
 
         parser.add_argument('--save_best', type=bool, default=True, help='if save the best model or not')
+        parser.add_argument('--load_taskindex', type=int, default=0,
+                            help='which trained-to-task_index model to load? set to latest to use best cached model')
         parser.add_argument('--load_epoch', type=str, default='best',
                             help='which epoch to load? set to latest to use best cached model')
 

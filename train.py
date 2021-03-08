@@ -10,6 +10,7 @@
 '''
 import logging
 import os
+from typing import List, Tuple
 
 from sklearn.utils import Bunch
 
@@ -57,15 +58,17 @@ def fit(opt,
     for epoch in range(opt.epoch_start, opt.n_epochs + opt.n_epochs_decay + 1):  # outer loop for different epochs;
         epoch_start_time = time.time()  # timer for entire epoch
 
+        total_loss = 0
+        n_batch = 0
         for data in train_dataset:  # inner loop within one epoch
-            previous_data = PseudoData(Bunch(**data))
+            previous_data: 'image,SingleOutput' = PseudoData(opt, Bunch(**data))
             model.set_data(previous_data)
             model.test(visualizer=visualizer)  # Get model.output
             '''
             data.image=data.image
             data.target=[output,output,...,<data.target>,output,output,...]
             '''
-            data = PseudoData(previous_data, model.output, task_index)  #
+            data: 'image,MultiOutput' = PseudoData(opt, previous_data, model.output, task_index)  #
 
             # logging.debug("after:"+str(data))
             # assert all(data.target[task_index] == previous_data.target)
@@ -73,22 +76,25 @@ def fit(opt,
             model.set_data(data)  # unpack _data from dataset and apply preprocessing
             model.train(task_index)
 
-        train_losses = model.get_current_losses()
+            losses = model.get_current_losses()
+            total_loss += losses['loss_total']
+            n_batch += 1
+        total_loss /= n_batch
         if epoch % opt.curve_freq == 0:  # visualizing training losses and save logging information to the disk
-            visualizer.add_losses(train_losses, epoch)
+            visualizer.add_losses({'loss_total':total_loss}, epoch)
         # Validation
-        val_matrix_item: MatrixItem = val(val_dataset, model, task_index, visualizer)
+        val_matrix, val_matrix_items = val(val_dataset, model, task_index, visualizer)
 
         if (epoch + 1) % opt.save_epoch_freq == 0:  # cache our model every <save_epoch_freq> epochs
             logging.info('saving the model at the end of epoch %d' % (epoch))
-            model.save_networks(epoch)
+            model.save_networks(continued_task_index, epoch)
 
-        if opt.save_best and (best_matrix_item is None or val_matrix_item > best_matrix_item):
+        if opt.save_best and (best_matrix_item is None or val_matrix > best_matrix_item):
             logging.info(f'saving the best model at the end of epoch {epoch}')
-            model.save_networks(epoch="best")
+            model.save_networks(continued_task_index, epoch="best")
 
         logging.info(
-            f'End of epoch {epoch} / {opt.n_epochs + opt.n_epochs_decay} \t train_loss={train_losses["loss_total"].item()},val:{val_matrix_item}, Time Taken: {time.time() - epoch_start_time} sec')
+            f'End of epoch {epoch} / {opt.n_epochs + opt.n_epochs_decay} \t train_loss={total_loss.item()},val:{val_matrix}, Time Taken: {time.time() - epoch_start_time} sec')
         model.update_learning_rate()  # update learning rates at the end of every epoch.
 
 
@@ -122,18 +128,18 @@ def test(opt, test_datasets, model: BaseModel, train_index, visualizer=None):
     """
 
     for test_index, test_dataset in enumerate(test_datasets):
-        matrixItem = val(test_dataset, model, test_index, visualizer, )
+        matrixItem, _ = val(test_dataset, model, test_index, visualizer, )
         test_matrix[(train_index, test_index)] = matrixItem
 
 
-def val(val_dataset, model: BaseModel, task_index, visualizer=None) -> MatrixItem:
+def val(val_dataset: 'Single task_dataset', model: BaseModel, task_index, visualizer=None) -> Tuple[MatrixItem, List]:
     """for validation on one task"""
     logging.info(f"Validating task {task_index}")
     start_time = time.time()  # timer for validate a task
 
     matrixItems = []
     for i, data in enumerate(val_dataset):  # inner loop within one epoch
-        model.set_data(PseudoData(Bunch(**data)))
+        model.set_data(PseudoData(opt, Bunch(**data)))
         model.test(visualizer)
         # Add matrixItem result
         matrixItems.append(model.get_matrix_item(task_index))
@@ -141,7 +147,7 @@ def val(val_dataset, model: BaseModel, task_index, visualizer=None) -> MatrixIte
     res = sum(matrixItems, MatrixItem()(accuracy=0, loss=0))
     res = res / len(matrixItems)
     logging.info(f"Validation Time Taken: {time.time() - start_time} sec")
-    return res
+    return res, matrixItems
 
 
 if __name__ == '__main__':

@@ -28,7 +28,7 @@ class AlexnetNet(BaseNet):
             the modified parser.
 
         """
-        parser.add_argument("--pretrained", type=bool, default=True, help="if pretrained the base alexnet or not")
+        parser.add_argument("--pretrained", type=bool, default=False, help="if pretrained the base alexnet or not")
         return parser
 
     def __init__(self, opt):
@@ -41,13 +41,11 @@ class AlexnetNet(BaseNet):
         self.shared_fc_layers = base_alexnet.classifier[:6]
         self.in_features = base_alexnet.classifier[6].in_features
 
-        self.multi_output_classifier = MultiOutputClassifier(self.in_features, opt.num_classes)
-        self.multi_output_classifier.cuda()
+        self.multi_output_classifier = MultiOutputClassifier(self.opt, self.in_features, opt.num_classes)
 
     def forward(self, _input):
         cnn_out = self.shared_cnn_layers(_input)
         cnn_out = self.adap_avg_pool(cnn_out)
         cnn_out_flatten = cnn_out.contiguous().view(cnn_out.size()[0], -1)
         shared_fc_out = self.shared_fc_layers(cnn_out_flatten)
-        multi_output_classifer = self.multi_output_classifier(shared_fc_out)
-        return multi_output_classifer
+        return self.multi_output_classifier(shared_fc_out)
