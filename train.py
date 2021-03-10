@@ -61,7 +61,7 @@ def fit(opt,
         total_loss = 0
         n_batch = 0
         for data in train_dataset:  # inner loop within one epoch
-            previous_data: 'image,SingleOutput' = PseudoData(opt, Bunch(**data))
+            previous_data: 'image,SingleOutput' = PseudoData(opt, Bunch(**data["data"]))
             model.set_data(previous_data)
             model.test(visualizer=visualizer)  # Get model.output
             '''
@@ -139,7 +139,7 @@ def val(val_dataset: 'Single task_dataset', model: BaseModel, task_index, visual
 
     matrixItems = []
     for i, data in enumerate(val_dataset):  # inner loop within one epoch
-        model.set_data(PseudoData(opt, Bunch(**data)))
+        model.set_data(PseudoData(opt, Bunch(**data["data"])))
         model.test(visualizer)
         # Add matrixItem result
         matrixItems.append(model.get_matrix_item(task_index))
@@ -154,7 +154,7 @@ if __name__ == '__main__':
     opt = TrainOptions().parse()  # get training options
 
     model = create_model(opt)  # create a model given opt.model and other options
-    model.setup(opt)  # regular setup: load and print networks; create schedulers
+    model.setup()  # regular setup: load and print networks; create schedulers
 
     visualizer = Visualizer(opt)
     visualizer.setup()  # regular setup:
@@ -173,7 +173,7 @@ if __name__ == '__main__':
     for task_index in range(nb_tasks):
         task_dataset = train_datasets[task_index]
         val_dataset = val_datasets[task_index]
-        model.setup(opt)  # regular setup: load and print networks; create schedulers before training each task
+        model.setup(task_index)  # regular setup: load and print networks; create schedulers before training each task
         train(opt,
               model=model,
               task_index=task_index,

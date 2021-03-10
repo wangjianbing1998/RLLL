@@ -5,7 +5,7 @@ from models.base_model import BaseModel
 from networks import create_net
 
 
-class LwfModel(BaseModel):
+class FinetuneModel(BaseModel):
 
     @staticmethod
     def modify_commandline_options(parser):
@@ -54,6 +54,7 @@ class LwfModel(BaseModel):
                                                                                                self.optimizer,
                                                                                                self.loss_criterion)
         self.optimizers = [self.optimizer]
+
         self.loss_names = getattr(self.loss_criterion, "loss_names")
 
         """
@@ -62,18 +63,14 @@ class LwfModel(BaseModel):
             not backward
         """
 
-        self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=True)
-        self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=True)
+        self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=False)
+        self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=False)
 
-        self.plus_other_loss = True
+        self.plus_other_loss = False
         self.need_backward = False
 
-    def setup(self, task_index=0):
-        BaseModel.setup(self)  # call the initialization method of BaseModel
-        # if task_index > 0:
-        #     self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=True)
-        #     self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=True)
-
+    def train(self, task_index):
         self.set_requires_grad(self.net_main.module.other_layers(task_index),
-                               requires_grad=True)
+                               requires_grad=False)
         self.set_requires_grad(self.net_main.module.task_layer(task_index), requires_grad=True)
+        BaseModel.train(self, task_index)  # call the initialization method of BaseModel

@@ -98,7 +98,7 @@ class BaseDataset(data.Dataset, ABC):
         if self.y_transforms is not None:
             target = self.y_transforms(target)
         target = torch.LongTensor([target])
-
+        # target = target.long()
         if is_gpu_avaliable(self.opt):
             image = image.to(self.opt.device)
             target = target.to(self.opt.device)

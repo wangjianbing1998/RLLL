@@ -4,13 +4,13 @@ rm -rf checkpoints/
 rm -rf logs/
 rm -rf output/
 mkdir output/
-GPU_IDS=1
+GPU_IDS=2
 INIT_METHOD=tcp://127.0.0.1:43722
 MODEL_NAME=finetune
 BATCH_SIZE=16
 LOG_LEVEL=info
-N_EPOCHS=50
-N_EPOCHS_DECAY=30
+N_EPOCHS=30
+N_EPOCHS_DECAY=10
 NUM_WORKERS=0
 DELS=logs_ckpts_outputs
 USE_DISTRIBUTED=none

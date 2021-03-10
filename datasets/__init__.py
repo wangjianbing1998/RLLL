@@ -19,6 +19,7 @@ import numpy as np
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
+from sklearn.utils import Bunch
 from torch.utils import data
 
 from datasets.base_dataset import BaseDataset
@@ -84,7 +85,8 @@ class SimpleDataset(data.Dataset):
 
     def __getitem__(self, item):
         index = self._data_index[item]
-        return self._dataset[(index, self._relabels)]
+        data = self._dataset[(index, self._relabels)]
+        return Bunch(data=data, data_name=self.data_name, relabels=self._relabels)
 
     def __len__(self):
         return len(self._data_index)

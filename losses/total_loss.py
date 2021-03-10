@@ -30,9 +30,6 @@ class TotalLoss(BaseLoss):
         self.lambda_all = opt.lambda_all
         self._plus_other_loss = False  # if plus other kd loss or not
         self._continued_task_index = 0  # currently trained task index
-        if self.nb_tasks != len(self.lambda_all):
-            raise ValueError(
-                f"Expected num_classes = len(lambda_all), but got nb_tasks={self.nb_tasks}, len(lambda_all) = {len(self.lambda_all)}")
 
     @staticmethod
     def modify_commandline_options(parser):
@@ -70,28 +67,31 @@ class TotalLoss(BaseLoss):
             """get <MultiOutput> loss"""
             task_preds, task_gts = lambda x:(preds[x]), lambda x:(gts[x])
             self.losses_without_lambda = []
-            self.loss_need_index = []
+            self.loss_need_backward_indices = []
             for i in range(self.continued_task_index + 1):
+                prediction = task_preds(i)
+                target = task_gts(i)
                 if i != task_index:
                     if self._plus_other_loss:
-                        self.losses_without_lambda.append(self.kd_loss(task_preds(i), task_gts(i)).cuda())
-                        self.loss_need_index.append(i)
+                        loss = self.kd_loss(prediction, target).cuda()
+                        self.loss_need_backward_indices.append(i)
                     else:
-                        self.losses_without_lambda.append(torch.FloatTensor([0]).cuda())
+                        loss = torch.FloatTensor([0]).cuda()
                 else:
-                    self.losses_without_lambda.append(self.ce_loss(task_preds(i), un_onehot(task_gts(i))).cuda())
-                    self.loss_need_index.append(i)
+                    loss = self.ce_loss(prediction, un_onehot(target)).cuda()
+                    self.loss_need_backward_indices.append(i)
 
+                self.losses_without_lambda.append(loss)
             self.losses_with_lambda = [(loss * lambda_).to(self.opt.device) for loss, lambda_ in
                                        zip(self.losses_without_lambda, self.lambda_all)]
             self.loss_total = sum(self.losses_with_lambda)
             logging.debug(
                 f"total_loss={self.loss_total.item()}, losses_with_lambda={tensors2str(self.losses_with_lambda)}, losses_without_lambda={tensors2str(self.losses_without_lambda)}")
-            return self.loss_total, [self.losses_without_lambda[index] for index in self.loss_need_index]
+            return self.loss_total, [self.losses_without_lambda[index] for index in self.loss_need_backward_indices]
 
         else:
             """get current task ce-loss"""
-            self.loss_need_index = []
+            self.loss_need_backward_indices = []
             self.losses_without_lambda = None
             self.losses_with_lambda = None
             targets = un_onehot(gts)

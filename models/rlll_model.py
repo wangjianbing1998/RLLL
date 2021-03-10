@@ -68,8 +68,12 @@ class RlllModel(BaseModel):
         self.plus_other_loss = True
         self.need_backward = True
 
-    def train(self, task_index):
-        self.set_requires_grad(self.net_main.module.multi_output_classifier.other_layers(task_index),
+    def setup(self, task_index=0):
+        BaseModel.setup(self)  # call the initialization method of BaseModel
+        # if task_index > 0:
+        #     self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=True)
+        #     self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=True)
+
+        self.set_requires_grad(self.net_main.module.other_layers(task_index),
                                requires_grad=True)
-        self.set_requires_grad(self.net_main.module.multi_output_classifier.task_layer(task_index), requires_grad=True)
-        BaseModel.train(self, task_index)  # call the initialization method of BaseModel
+        self.set_requires_grad(self.net_main.module.task_layer(task_index), requires_grad=True)

@@ -86,55 +86,6 @@ def create_net(opt):
     return instance
 
 
-class MultiOutputClassifier(nn.Module):
-    """Multi Output Classifier, network.forward(input) -> <MultiOutputClassifier>
-
-    self.nb_tasks
-    self.num_classes
-
-    self.task_outputs: output per task, [(batch_size,num_class) for num_class in self.num_classes]
-    self.output: total output, [batch_size,num_class*nb_tasks]
-    """
-
-    def __init__(self, opt, in_features, num_classes):
-        super(MultiOutputClassifier, self).__init__()
-        self.opt = opt
-        self.num_classes = num_classes
-        self.in_features = in_features
-        self.target_outputs = nn.ModuleList([nn.Linear(in_features, num_class) for num_class in num_classes])
-        self.nb_tasks = len(num_classes)
-
-    def forward(self, input):
-        task_outputs = [target_output(input) for target_output in self.target_outputs]
-        return task_outputs
-
-    def _split_output2n(self, output):
-        c = [0]
-        for num_class in self.num_classes:
-            c.append(c[-1] + num_class)
-        task_outputs = []
-        for task_index in range(self.nb_tasks):
-            task_outputs.append(output[:, c[task_index]:c[task_index + 1]])
-        return task_outputs
-
-    def __getitem__(self, task_index):
-        return self.target_outputs[task_index]
-
-    def other_layers(self, task_index):
-        return [classifier for index, classifier in enumerate(self.target_outputs) if index != task_index]
-
-    def task_layer(self, task_index):
-        for index, classifier in enumerate(self.target_outputs):
-            if index == task_index:
-                return classifier
-
-    def cuda(self, device=None):
-        if device is None:
-            device = self.opt.device
-        self.target_outputs = [target_output.to(device) for target_output in self.target_outputs]
-        # super(MultiOutputClassifier, self).to(device)
-        self.to(device)
-
 
 class Identity(nn.Module):
     def forward(self, x):

@@ -3,12 +3,11 @@ cd /home/wangjianbing/RLLL/
 rm -rf checkpoints/
 rm -rf logs/
 rm -rf output/
-
 mkdir output/
-GPU_IDS=2
-INIT_METHOD=tcp://127.0.0.1:46622
-MODEL_NAME=lwf
-BATCH_SIZE=4
+GPU_IDS=1
+INIT_METHOD=tcp://127.0.0.1:43722
+MODEL_NAME=finetune
+BATCH_SIZE=16
 LOG_LEVEL=info
 N_EPOCHS=30
 N_EPOCHS_DECAY=10
@@ -21,7 +20,7 @@ SUFFIX=" --model_name $MODEL_NAME --n_epochs $N_EPOCHS --use_distributed $USE_DI
 
 DOC1=$MODEL_NAME"_mnist-cifar10-cifar100.txt"
 rm $DOC1
-nohup python train.py --dataset_list mnist cifar10 cifar100 $SUFFIX > $DOC1 2>&1 &
+nohup python train_single_task.py --dataset_list mnist cifar10 cifar100 $SUFFIX > $DOC1 2>&1 &
 
 DOC2=$MODEL_NAME"_cifar100-cifar10-mnist.txt"
 rm $DOC2

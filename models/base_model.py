@@ -34,7 +34,6 @@ class BaseModel(ABC):
 
         self.shared_cnn_layers = []
         self.shared_fc_layers = []
-        self.other_layers = []
 
         self._plus_other_loss = False  # need to plus the other loss or not,
         self._need_backward = False  # need to backward to optimize the previous task
@@ -59,18 +58,22 @@ class BaseModel(ABC):
 
         return parser
 
-    def setup(self, opt):
+    def setup(self):
         """Load and print networks; create schedulers
 
         Parameters:
             opt (Option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         if self.isTrain:
-            self.schedulers = [get_scheduler(optimizer, opt) for optimizer in self.optimizers]
+            self.schedulers = [get_scheduler(optimizer, self.opt) for optimizer in self.optimizers]
 
-        if not self.isTrain or opt.continue_train:
-            self.load_networks(opt.load_taskindex, opt.load_epoch)
+        if not self.isTrain or self.opt.continue_train:
+            self.load_networks(self.opt.load_taskindex, self.opt.load_epoch)
         self.print_networks(repeat=False)
+
+        # default for task 0
+        self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=True)
+        self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=True)
 
     def eval(self):
         """Make models eval mode during test time"""
@@ -291,7 +294,7 @@ class BaseModel(ABC):
         if self.image is None:
             raise ValueError(f"Expected model.set_data(data) be called before forward(), to get data")
         task_outputs = self.net_main(self.image)
-        self.output = MultiOutput(task_outputs)
+        self.output: MultiOutput = MultiOutput(task_outputs)
 
     # @torchsnooper.snoop()
     def backward(self, task_index):
@@ -304,11 +307,11 @@ class BaseModel(ABC):
                 scaled_loss.backward()
         else:
             # backward method 1
-            # self.loss_total.backward()
+            self.loss_total.backward()
             # backward method 2
-            for loss in self.losses_without_lambda[:-1]:
-                loss.backward(retain_graph=True)
-            self.losses_without_lambda[-1].backward()
+            # for loss in self.losses_without_lambda[:-1]:
+            #     loss.backward(retain_graph=True)
+            # self.losses_without_lambda[-1].backward()
 
     def optimize_parameters(self, task_index):
         """Update network weights; it will be called in every training iteration."""

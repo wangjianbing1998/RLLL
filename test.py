@@ -55,7 +55,7 @@ if __name__ == '__main__':
     opt = TestOptions().parse()  # get training options
 
     model = create_model(opt)  # create a model given opt.model and other options
-    model.setup(opt)  # regular setup: load and print networks; create schedulers
+    model.setup()  # regular setup: load and print networks; create schedulers
 
     visualizer = Visualizer(opt)
     visualizer.setup()  # regular setup:

@@ -28,7 +28,7 @@ def val(val_dataset: 'Single task_dataset', model: BaseModel, task_index, visual
 
     matrixItems = []
     for i, data in enumerate(val_dataset):  # inner loop within one epoch
-        model.set_data(PseudoData(opt, Bunch(**data)))
+        model.set_data(PseudoData(opt, Bunch(**data["data"])))
         model.test(visualizer)
         # Add matrixItem result
         matrixItems.append(model.get_matrix_item(task_index))
@@ -45,9 +45,11 @@ def train(opt, model, task_index, continued_task_index, train_dataset, val_datas
     best_matrix_item = None
     for epoch in range(opt.epoch_start, opt.n_epochs + opt.n_epochs_decay + 1):  # outer loop for different epochs;
         epoch_start_time = time.time()  # timer for entire epoch
-
+        total_loss = 0
+        n_batch = 0
         for data in train_dataset:  # inner loop within one epoch
-            previous_data: 'image,SingleOutput' = PseudoData(opt, Bunch(**data))
+            logging.debug(f'Loading dataset {data["data_name"]}, target={data["data"]["target"]}')
+            previous_data: 'image,SingleOutput' = PseudoData(opt, Bunch(**data["data"]))
             model.set_data(previous_data)
             model.test(visualizer)
             data: 'image,MultiOutput' = PseudoData(opt, previous_data, model.output, task_index)  #
@@ -57,9 +59,12 @@ def train(opt, model, task_index, continued_task_index, train_dataset, val_datas
 
             model.train(task_index)
 
-        train_losses = model.get_current_losses()
+            losses = model.get_current_losses()
+            total_loss += losses['loss_total']
+            n_batch += 1
+        total_loss /= n_batch
         if epoch % opt.curve_freq == 0:  # visualizing training losses and save logging information to the disk
-            visualizer.add_losses(train_losses, epoch)
+            visualizer.add_losses({'loss_total':total_loss}, epoch)
         # Validation
         val_matrix, val_matrix_items = val(val_dataset, model, task_index, visualizer)
 
@@ -72,7 +77,7 @@ def train(opt, model, task_index, continued_task_index, train_dataset, val_datas
             model.save_networks(continued_task_index, epoch="best")
 
         logging.info(
-            f'End of epoch {epoch} / {opt.n_epochs + opt.n_epochs_decay} \t train_loss={train_losses["loss_total"].item()},val:{val_matrix}, Time Taken: {time.time() - epoch_start_time} sec')
+            f'End of epoch {epoch} / {opt.n_epochs + opt.n_epochs_decay} \t train_loss={total_loss.item()},val:{val_matrix}, Time Taken: {time.time() - epoch_start_time} sec')
         model.update_learning_rate()  # update learning rates at the end of every epoch.
 
 
