@@ -17,6 +17,6 @@ IMAGENET = "imagenet"
 
 # MODEL NAME
 LWF = "lwf"
-RLLL = "rlll"
+TBLWF = "tblwf"
 FINE_TUNE = "fine_tune"
 warm_TUNE = "warm_tune"

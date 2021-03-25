@@ -12,12 +12,16 @@ class TrainOptions(BaseOptions):
     def initialize(self, parser):
         parser = BaseOptions.initialize(self, parser)
         # name specifics
-        parser.add_argument('--model_name', type=str, default="rlll",
-                            choices=["finetune", "warmtune", "hottune", "folwf", "lwf", "rlll", ],
-                            help='model choice from finetune|warmtune|lwf|rlll', )
+        parser.add_argument('--model_name', type=str, default="tblwf",
+                            choices=["finetune", "warmtune", "hottune", "folwf", "lwf", "tblwf", "nllwf", "fonllwf",
+                                     "jointtrain"],
+                            help='model choice from finetune|warmtune|lwf|tblwf|nllwf|fonllwf|jointtrain', )
         parser.add_argument('--task_dataset_name', type=str, default="custom", choices=["custom"],
                             help='task dataset choice from custom', )
         parser.add_argument('--continue_train', action="store_true", help="if continuely train the model or not")
+
+        parser.add_argument('--log_filename', type=str, default="output/train_{}.txt", help='logging filename')
+        # parser.add_argument('--log_filename', type=str, default=None, help='logging filename')
 
         # experiment specifics
         parser.add_argument('--seed', type=int, default=42)
@@ -33,6 +37,9 @@ class TrainOptions(BaseOptions):
                             help='which trained-to-task_index model to load? set to latest to use best cached model')
         parser.add_argument('--load_epoch', type=str, default='best',
                             help='which epoch to load? set to latest to use best cached model')
+        # training before
+        parser.add_argument('--dels', type=str, default="",
+                            help='which need to be clear delete, strings contains ckpt, log or output ')
 
         parser.add_argument('--curve_freq', type=int, default=1,
                             help='frequence of plotting the loss or accuracy curve')
@@ -43,8 +50,6 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--n_epochs_decay', type=int, default=100,
                             help='number of epochs to linearly decay learning rate to zero')
 
-        # for setting inputs
-        parser.add_argument('--imsize', type=int, default=256)
 
         # for displays
         parser.add_argument('--save_epoch_freq', type=int, default=float('inf'),
@@ -64,6 +69,6 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--lr_decay_iters', type=int, default=50,
                             help='multiply by a gamma every lr_decay_iters iterations')
 
-        parser.add_argument('--result_dir', type=str, default='./results/', help='saves results here.')
+        parser.add_argument('--result_dir', type=str, default='./train_results/', help='saves results here.')
         self.isTrain = True
         return parser

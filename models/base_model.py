@@ -40,6 +40,7 @@ class BaseModel(ABC):
 
         self.target, self.image = None, None
         self.output = None
+
         self._continued_task_index = 0  # continued trained task index
 
         self.network_printed = False
@@ -65,15 +66,15 @@ class BaseModel(ABC):
             opt (Option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         if self.isTrain:
+            # default for task 0
+            self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=True)
+            self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=True)
+
             self.schedulers = [get_scheduler(optimizer, self.opt) for optimizer in self.optimizers]
 
         if not self.isTrain or self.opt.continue_train:
             self.load_networks(self.opt.load_taskindex, self.opt.load_epoch)
         self.print_networks(repeat=False)
-
-        # default for task 0
-        self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=True)
-        self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=True)
 
     def eval(self):
         """Make models eval mode during test time"""
@@ -263,9 +264,15 @@ class BaseModel(ABC):
                     raise ValueError(f'Expected normal distributed `use_distributed`, but got {opt.use_distributed}')
             else:
                 # for none distributed data parallel, only DataParallel
-                net = DataParallel(net, device_ids=opt.gpu_ids)
-                net.to(device=self.opt.device)
 
+                # net = DataParallel(net, device_ids=opt.gpu_ids)
+                net = DataParallel(net, device_ids=[0])
+
+                self.cuda()
+                # net.to(device=self.opt.device)
+                logging.info(f'For None Distributed Data Paraller, Only DataParallel')
+
+                return net, optimizer, criterion
         else:
             # use CPU
             net, optimizer = amp.initialize(net, optimizer, opt_level="O1")  # 这里多个net就用列表
@@ -285,7 +292,6 @@ class BaseModel(ABC):
         """Unpack input _data from the dataloader and perform necessary pre-processing steps.
         """
         data.cuda(self.opt.device)
-
         self.image = data.image
         self.target: MultiOutput = data.target
 
@@ -306,12 +312,12 @@ class BaseModel(ABC):
             with amp.scale_loss(self.loss_total, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            # backward method 1
-            self.loss_total.backward()
-            # backward method 2
-            # for loss in self.losses_without_lambda[:-1]:
-            #     loss.backward(retain_graph=True)
-            # self.losses_without_lambda[-1].backward()
+            # logging.debug("backward method 1")
+            # self.loss_total.backward()
+            # logging.debug('backward method: losses.backward')
+            for loss in self.losses_without_lambda[:-1]:
+                loss.backward(retain_graph=True)
+            self.losses_without_lambda[-1].backward()
 
     def optimize_parameters(self, task_index):
         """Update network weights; it will be called in every training iteration."""
@@ -346,3 +352,13 @@ class BaseModel(ABC):
         """Calculate additional visualization"""
 
         pass
+
+    def cuda(self, device=None):
+        """cuda: net"""
+        if device is None:
+            device = self.opt.device
+        for name in self.net_names:
+            if isinstance(name, str):
+                net = getattr(self, "net_" + name)
+                net.cuda(device)
+                logging.info(f'[Network {name}] move to cuda({device})')

@@ -5,7 +5,7 @@ from models.base_model import BaseModel
 from networks import create_net
 
 
-class RlllModel(BaseModel):
+class WarmtuneModel(BaseModel):
 
     @staticmethod
     def modify_commandline_options(parser):
@@ -44,16 +44,18 @@ class RlllModel(BaseModel):
         self.net_main = create_net(opt)
 
         self.loss_criterion = create_loss(opt)
-        if self.opt.optimizer_type == 'adam':
-            self.optimizer = torch.optim.Adam(self.net_main.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
-        elif opt.optimizer_type == 'sgd':
-            self.optimizer = torch.optim.SGD(self.net_main.parameters(), lr=opt.lr)
-        else:
-            raise ValueError(f"Expected opt.optimizer_type in ['adam','sgd'], but got {opt.optimizer_type}")
-        self.net_main, self.optimizer, self.loss_criterion = self.init_net_optimizer_with_apex(opt, self.net_main,
-                                                                                               self.optimizer,
-                                                                                               self.loss_criterion)
-        self.optimizers = [self.optimizer]
+
+        if self.isTrain:
+            if self.opt.optimizer_type == 'adam':
+                self.optimizer = torch.optim.Adam(self.net_main.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
+            elif opt.optimizer_type == 'sgd':
+                self.optimizer = torch.optim.SGD(self.net_main.parameters(), lr=opt.lr)
+            else:
+                raise ValueError(f"Expected opt.optimizer_type in ['adam','sgd'], but got {opt.optimizer_type}")
+            self.net_main, self.optimizer, self.loss_criterion = self.init_net_optimizer_with_apex(opt, self.net_main,
+                                                                                                   self.optimizer,
+                                                                                                   self.loss_criterion)
+            self.optimizers = [self.optimizer]
         self.loss_names = getattr(self.loss_criterion, "loss_names")
 
         """
@@ -62,18 +64,14 @@ class RlllModel(BaseModel):
             not backward
         """
 
-        self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=True)
-        self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=True)
-
-        self.plus_other_loss = True
-        self.need_backward = True
+        self.plus_other_loss = False
+        self.need_backward = False
 
     def setup(self, task_index=0):
         BaseModel.setup(self)  # call the initialization method of BaseModel
-        # if task_index > 0:
-        #     self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=True)
-        #     self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=True)
+        if task_index > 0:
+            self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=False)
+            # self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=True)
 
-        self.set_requires_grad(self.net_main.module.other_layers(task_index),
-                               requires_grad=True)
+        self.set_requires_grad(self.net_main.module.other_layers(task_index), requires_grad=False)
         self.set_requires_grad(self.net_main.module.task_layer(task_index), requires_grad=True)

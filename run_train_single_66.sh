@@ -1,3 +1,4 @@
+# train with my main()
 echo 'Training...'
 cd /home/wangjianbing/RLLL/
 rm -rf checkpoints/
@@ -5,7 +6,7 @@ rm -rf logs/
 rm -rf output/
 mkdir output/
 GPU_IDS=1
-INIT_METHOD=tcp://127.0.0.1:43722
+INIT_METHOD=tcp://127.0.0.1:46622
 MODEL_NAME=finetune
 BATCH_SIZE=16
 LOG_LEVEL=info

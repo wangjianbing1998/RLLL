@@ -13,7 +13,7 @@ from collections import defaultdict
 
 from datasets import dataset_names
 from task_datasets.base_task_dataset import BaseTaskDataset
-from util.util import print_tensor, split2numclasses, MultiOutput
+from util.util import split2numclasses, MultiOutput
 
 """This package contains losses_without_lambda related to objective functions, optimizations, and network architectures.
 
@@ -80,6 +80,8 @@ def get_num_classes_by_data_list(dataset_list):
         the <num_classes> with the input dataset_list
     >>> get_num_classes_by_data_list(["mnist_1","mnist_2","mnist_3"])
     [4, 4, 2]
+    >>> get_num_classes_by_data_list(["cifar100","cifar10","mnist"])
+    [100, 10, 10]
     """
     nb_tasks = len(dataset_list)
     dataname2taskIndices = dataname2taskindex(dataset_list)
@@ -174,16 +176,11 @@ class PseudoData(object):
         return self._target
 
     def __repr__(self):
-        return (
-            f'PseudoData \n\timage={print_tensor(self._image, pt=False)}\n\ttarget={print_tensor(self._target.output if hasattr(self._target, "output") else self._target, pt=False)}')
+        return f'PseudoData(image,{"MultiOutput" if isinstance(self._target, MultiOutput) else "SingleOutput"})'
 
     def cuda(self, device=None):
         if device is None:
             device = self.opt.device
-        self._image = self._image.to(device)
-        if isinstance(self._target, MultiOutput):
-            # MultiOutput
-            self._target.cuda(device)
-        else:
-            # torch.Tensor
-            self._target = self._target.to(device)
+
+        self._image = self._image.cuda(device)
+        self._target = self._target.cuda(device)

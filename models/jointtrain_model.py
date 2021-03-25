@@ -1,3 +1,13 @@
+# encoding=utf-8
+'''
+@File    :   jointtrain_model.py    
+@Contact :   jianbingxiaman@gmail.com
+@License :   (C)Copyright 2020-2021, John Hopcraft Lab-CV
+@Desciption : 
+@Modify Time      @Author    @Version
+------------      -------    --------
+2021/3/25 16:50   jianbingxia     1.0    
+'''
 import torch
 
 from losses import create_loss
@@ -5,7 +15,7 @@ from models.base_model import BaseModel
 from networks import create_net
 
 
-class FinetuneModel(BaseModel):
+class JointTrainModel(BaseModel):
 
     @staticmethod
     def modify_commandline_options(parser):
@@ -64,14 +74,54 @@ class FinetuneModel(BaseModel):
             not backward
         """
 
-        self.plus_other_loss = False
+        self.plus_other_loss = True
         self.need_backward = False
 
     def setup(self, task_index=0):
         BaseModel.setup(self)  # call the initialization method of BaseModel
         if task_index > 0:
-            self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=False)
-            self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=False)
-
-        self.set_requires_grad(self.net_main.module.other_layers(task_index), requires_grad=False)
+            # self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=False)
+            # self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=False)
+            pass
+        self.set_requires_grad(self.net_main.module.other_layers(task_index), requires_grad=True)
         self.set_requires_grad(self.net_main.module.task_layer(task_index), requires_grad=True)
+
+    def joint_train(self, task_index, train_datasets, ):
+        for train_dataset in train_datasets:
+            pass
+            for data in train_dataset:  # inner loop within one epoch
+                previous_data: 'image,SingleOutput' = PseudoData(opt, Bunch(**data["data"]))
+                model.set_data(previous_data)
+                model.test(visualizer=visualizer)  # Get model.output
+                '''
+                data.image=data.image
+                data.target=[output,output,...,<data.target>,output,output,...]
+                '''
+                data: 'image,MultiOutput' = PseudoData(opt, previous_data, model.output, task_index)  #
+
+                # logging.debug("after:"+str(data))
+                # assert all(data.target[task_index] == previous_data.target)
+                # set data and fit
+                model.set_data(data)  # unpack _data from dataset and apply preprocessing
+                model.train(task_index)
+
+                losses = model.get_current_losses()
+                total_loss += losses['loss_total']
+                n_batch += 1
+            total_loss /= n_batch
+            if epoch % opt.curve_freq == 0:  # visualizing training losses and save logging information to the disk
+                visualizer.add_losses({'loss_total':total_loss}, epoch)
+            # Validation
+            val_matrix, val_matrix_items = val(val_dataset, model, task_index, visualizer)
+
+            if (epoch + 1) % opt.save_epoch_freq == 0:  # cache our model every <save_epoch_freq> epochs
+                logging.info('saving the model at the end of epoch %d' % (epoch))
+                model.save_networks(continued_task_index, epoch)
+
+            if opt.save_best and (best_matrix_item is None or val_matrix > best_matrix_item):
+                logging.info(f'saving the best model at the end of epoch {epoch}')
+                model.save_networks(continued_task_index, epoch="best")
+
+            logging.info(
+                f'End of epoch {epoch} / {opt.n_epochs + opt.n_epochs_decay} \t train_loss={total_loss.item()},val:{val_matrix}, Time Taken: {time.time() - epoch_start_time} sec')
+            model.update_learning_rate()  # update learning rates at the end of every epoch.

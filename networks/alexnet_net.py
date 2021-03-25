@@ -41,7 +41,6 @@ class AlexnetNet(BaseNet):
         self.adap_avg_pool = base_alexnet.avgpool
         self.shared_fc_layers = base_alexnet.classifier[:6]
         self.in_features = base_alexnet.classifier[6].in_features
-
         self.target_outputs = nn.ModuleList([nn.Linear(self.in_features, num_class) for num_class in opt.num_classes])
 
     def forward(self, _input):

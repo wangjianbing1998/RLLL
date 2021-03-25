@@ -177,7 +177,7 @@ def seed_everything(seed):
     """
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
-    os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
+    # os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -226,7 +226,7 @@ class MultiOutput(object):
     """
 
     def __repr__(self):
-        return f'MultiOutput({self.nb_outputs}: [{["(" + task_output.shape + ")" for task_output in self.task_outputs]}])'
+        return f'MultiOutput({self.nb_outputs}: [{["(" + str(task_output.shape) + ")" for task_output in self.task_outputs]}])'
 
     def __init__(self, task_outputs: []):
         self.task_outputs = task_outputs
@@ -243,6 +243,7 @@ class MultiOutput(object):
 
     def cuda(self, device):
         self.task_outputs = [task_output.cuda(device) for task_output in self.task_outputs]
+        return self
 
 
 class MatrixItem(object):
@@ -255,7 +256,7 @@ class MatrixItem(object):
         self.accuracy = 0
         self.loss = 0
         if preds is not None and gts is not None:
-            self.accuracy = self.__cal_accuracy(preds, gts)
+            self.accuracy = self.cal_accuracy(preds, gts)
             loss = loss_criterion(preds, gts)
             self.loss = loss.item()
 
@@ -276,10 +277,26 @@ class MatrixItem(object):
         self.loss = loss
         return self
 
-    def __cal_accuracy(self, preds: torch.Tensor, gts: torch.Tensor):
+    @staticmethod
+    def cal_accuracy(preds: torch.Tensor, gts: torch.Tensor):
         """calculate the accuracy on predictions and ground-truths
 
         preds can be (batch_size,) or (batch_size,num_class)
+
+        >>> matrixitem=MatrixItem()
+        >>> targets=torch.LongTensor([1,2,6,4,5])
+        >>> preds=torch.FloatTensor([1,2,3,4,5])
+        >>> matrixitem.cal_accuracy(preds,targets)
+        80
+        >>> preds=torch.FloatTensor([
+        ...            [0,1,0,0,0,0],
+        ...            [0,0,1,0,0,0],
+        ...            [0,0,0,1,0,0],
+        ...            [0,0,0,0,1,0],
+        ...            [0,0,0,0,0,1],
+        ...            ])
+        >>> matrixitem.cal_accuracy(preds,targets)
+        80
         """
         arg_maxs = preds
         if len(preds.shape) == 2:
@@ -318,8 +335,8 @@ class TestMatrix(object):
             raise ValueError(f'Expected values is <MatrixItem> or <predictions,gound-truths>, but got {values}')
 
     def __get_df_matrix(self):
-        nb_tasks = max(max(self.matrix.keys())) + 1
-        ans = np.zeros((nb_tasks, nb_tasks))
+        nb_tasks = max(max(self.matrix.keys()))
+        ans = np.zeros((nb_tasks + 1, nb_tasks + 1))
         for (x, y), item in self.matrix.items():
             ans[x, y] = item.accuracy
         df = pd.DataFrame(ans)
@@ -419,8 +436,9 @@ def relabel(targets):
 def load_best_ckptname(ckpts_path):
     ls = []
     for file in os.listdir(ckpts_path):
-        task_index, epoch, *others = file.split('_')
-        ls.append((int(task_index), float(epoch.replace('best', float('inf')))))
+        if file.endswith('.pth'):
+            task_index, epoch, *others = file.split('_')
+            ls.append((int(task_index), float(epoch) if epoch != 'best' else float('inf')))
     if len(ls) == 0:
         logging.warning(f'NotFoundBestCheckpoint at {ckpts_path}')
         return None, None
@@ -428,3 +446,23 @@ def load_best_ckptname(ckpts_path):
     if best_epoch == float('inf'):
         best_epoch = 'best'
     return int(best_taskindex), str(best_epoch)
+
+
+class Checker(object):
+
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            if k == 'dataset_list':
+                self.check_dataset_list(v)
+            else:
+                raise ValueError(f'UnExpected checker {k}')
+
+    def check_dataset_list(self, dataset_list):
+        from datasets import dataset_names
+        for index, data_name in enumerate(dataset_list):
+            data_name = data_name.lower()
+            if '_' in data_name:
+                data_name = data_name[:data_name.index('_')]
+
+            if data_name not in dataset_names:
+                raise ValueError(f'Dataset named {data_name} not found!')

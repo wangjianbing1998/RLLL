@@ -19,7 +19,7 @@ from util.util import TestMatrix, MatrixItem
 
 """General-purpose training script for multi-task learning(or LifeLong Learning) translation.
 
-This script works for various models (with option '--model_name': e.g., lwf, finetune, warmtune, hottune, folwf, rlll) and
+This script works for various models (with option '--model_name': e.g., lwf, finetune, warmtune, hottune, folwf, tblwf) and
 different task_datasets (with option '--task_dataset_name': e.g., custom).
 
 It first creates model, dataset, and visualizer given the option.
@@ -129,7 +129,7 @@ def test(opt, test_datasets, model: BaseModel, train_index, visualizer=None):
 
     for test_index, test_dataset in enumerate(test_datasets):
         matrixItem, _ = val(test_dataset, model, test_index, visualizer, )
-        test_matrix[(train_index, test_index)] = matrixItem
+        test_matrix[(train_index, test_index + 1)] = matrixItem
 
 
 def val(val_dataset: 'Single task_dataset', model: BaseModel, task_index, visualizer=None) -> Tuple[MatrixItem, List]:
@@ -182,6 +182,6 @@ if __name__ == '__main__':
               val_dataset=val_dataset,
               visualizer=visualizer,
               )
-        test(opt, test_datasets, model, train_index=task_index, visualizer=visualizer)
+        test(opt, test_datasets, model, train_index=task_index + 1, visualizer=visualizer)
 
     test_matrix.save_matrix(os.path.join(opt.result_dir, f'{opt.name}.xlsx'))

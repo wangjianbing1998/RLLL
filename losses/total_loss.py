@@ -8,7 +8,6 @@
 ------------      -------    --------
 2021/1/23 12:43   jianbingxia     1.0    
 '''
-import logging
 from typing import Union
 
 import torch
@@ -16,7 +15,7 @@ from torch import nn
 
 from losses import BaseLoss
 from losses.base_loss import KDLoss
-from util.util import tensors2str, MultiOutput, un_onehot
+from util.util import MultiOutput
 
 
 class TotalLoss(BaseLoss):
@@ -37,7 +36,6 @@ class TotalLoss(BaseLoss):
 
         Parameters:
             parser          -- original option parser
-
 
         Returns:
             the modified parser.
@@ -67,40 +65,26 @@ class TotalLoss(BaseLoss):
             """get <MultiOutput> loss"""
             task_preds, task_gts = lambda x:(preds[x]), lambda x:(gts[x])
             self.losses_without_lambda = []
-            self.loss_need_backward_indices = []
             for i in range(self.continued_task_index + 1):
                 prediction = task_preds(i)
                 target = task_gts(i)
                 if i != task_index:
                     if self._plus_other_loss:
-                        loss = self.kd_loss(prediction, target).cuda()
-                        self.loss_need_backward_indices.append(i)
+                        loss = self.kd_loss(prediction, target)
                     else:
-                        loss = torch.FloatTensor([0]).cuda()
+                        continue
                 else:
-                    loss = self.ce_loss(prediction, un_onehot(target)).cuda()
-                    self.loss_need_backward_indices.append(i)
-
+                    loss = self.ce_loss(prediction, target.squeeze()).cuda()
                 self.losses_without_lambda.append(loss)
-            self.losses_with_lambda = [(loss * lambda_).to(self.opt.device) for loss, lambda_ in
-                                       zip(self.losses_without_lambda, self.lambda_all)]
+
+            self.losses_with_lambda = self.losses_without_lambda  # TODO implement the losses_with_lambda
             self.loss_total = sum(self.losses_with_lambda)
-            logging.debug(
-                f"total_loss={self.loss_total.item()}, losses_with_lambda={tensors2str(self.losses_with_lambda)}, losses_without_lambda={tensors2str(self.losses_without_lambda)}")
-            return self.loss_total, [self.losses_without_lambda[index] for index in self.loss_need_backward_indices]
+            return self.loss_total, self.losses_without_lambda
 
         else:
             """get current task ce-loss"""
             self.loss_need_backward_indices = []
             self.losses_without_lambda = None
             self.losses_with_lambda = None
-            targets = un_onehot(gts)
-            self.loss_total = self.ce_loss(preds, targets)
+            self.loss_total = self.ce_loss(preds, gts.squeeze())
             return self.loss_total
-
-    def cuda(self, device=None):
-        if device is None:
-            device = self.opt.device
-
-        self.kd_loss = self.kd_loss.to(device)
-        self.ce_loss = self.ce_loss.to(device)

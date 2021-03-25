@@ -1,5 +1,5 @@
-# RLLL
-R-LifeLongLearning
+# TB-Lwf
+Task-Based LifeLongLearning
 
 
 # Model
@@ -8,7 +8,7 @@ R-LifeLongLearning
 - hottune: unfrozen the shared-cnn layers
 - folwf: frozen other layers' LWF
 - lwf: learning without forgetting, unfrozen all layers and use the other loss
-- rlll(Ours): unfrozen all layers and use the other loss, use the backward training
+- tblwf(Ours): unfrozen all layers and use the other loss, use the backward training
 
 
 
@@ -23,7 +23,7 @@ R-LifeLongLearning
 | hottune  | R                 | R                | R          | Q            | Q          | Q        |
 | fo-lwf   | R                 | R                | R          | Q            | R          | Q        |
 | lwf      | R                 | R                | R          | R            | R          | Q        |
-| RLLL(Ours)     | R                 | R                | R          | R            | R          | R        |
+| tb-lwf(Ours)     | R                 | R                | R          | R            | R          | R        |
 
 
 
