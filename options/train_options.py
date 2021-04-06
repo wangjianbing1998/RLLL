@@ -12,10 +12,7 @@ class TrainOptions(BaseOptions):
     def initialize(self, parser):
         parser = BaseOptions.initialize(self, parser)
         # name specifics
-        parser.add_argument('--model_name', type=str, default="tblwf",
-                            choices=["finetune", "warmtune", "hottune", "folwf", "lwf", "tblwf", "nllwf", "fonllwf",
-                                     "jointtrain"],
-                            help='model choice from finetune|warmtune|lwf|tblwf|nllwf|fonllwf|jointtrain', )
+
         parser.add_argument('--task_dataset_name', type=str, default="custom", choices=["custom"],
                             help='task dataset choice from custom', )
         parser.add_argument('--continue_train', action="store_true", help="if continuely train the model or not")
@@ -50,7 +47,6 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--n_epochs_decay', type=int, default=100,
                             help='number of epochs to linearly decay learning rate to zero')
 
-
         # for displays
         parser.add_argument('--save_epoch_freq', type=int, default=float('inf'),
                             help='frequency of saving checkpoints at the end of epochs')
@@ -64,7 +60,7 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--lr', type=float, default=1e-4, help='initial learning rate for adam')
         parser.add_argument('--pool_size', type=int, default=50,
                             help='the size of image buffer that stores previously generated images')
-        parser.add_argument('--lr_policy', type=str, default='linear',
+        parser.add_argument('--lr_policy', type=str, default='plateau',
                             help='learning rate policy. [linear | step | plateau | cosine]')
         parser.add_argument('--lr_decay_iters', type=int, default=50,
                             help='multiply by a gamma every lr_decay_iters iterations')

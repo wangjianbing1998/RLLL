@@ -67,11 +67,13 @@ class FinetuneModel(BaseModel):
         self.plus_other_loss = False
         self.need_backward = False
 
-    def setup(self, task_index=0):
-        BaseModel.setup(self)  # call the initialization method of BaseModel
-        if task_index > 0:
-            self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=False)
-            self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=False)
+    def setup(self, task_index=0, step=1):
+        if step == 1:
+            BaseModel.setup(self, task_index)  # call the initialization method of BaseModel
 
-        self.set_requires_grad(self.net_main.module.other_layers(task_index), requires_grad=False)
-        self.set_requires_grad(self.net_main.module.task_layer(task_index), requires_grad=True)
+            self.shared_fc_layers = False
+            self.shared_cnn_layers = False
+            self.other_layers = False
+            self.task_layer = True
+        else:
+            raise ValueError(f'finetune Expected 1<=step<=2, but got {step}')

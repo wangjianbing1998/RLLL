@@ -30,6 +30,7 @@ class MnistDataset(BaseDataset):
         if phase == "val":
             phase = "test"
 
+        opt.load_dataset_mode = 'reader'
         super(MnistDataset, self).__init__(opt, phase)
         self.data_dir = opt.mnist_dataset_dir
 

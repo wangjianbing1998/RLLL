@@ -15,7 +15,7 @@ from torch import nn
 
 from losses import BaseLoss
 from losses.base_loss import KDLoss
-from util.util import MultiOutput
+from utils.util import MultiOutput
 
 
 class TotalLoss(BaseLoss):
@@ -86,5 +86,5 @@ class TotalLoss(BaseLoss):
             self.loss_need_backward_indices = []
             self.losses_without_lambda = None
             self.losses_with_lambda = None
-            self.loss_total = self.ce_loss(preds, gts.squeeze())
+            self.loss_total = self.ce_loss(preds, gts)
             return self.loss_total

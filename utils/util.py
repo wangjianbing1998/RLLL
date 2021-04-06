@@ -1,6 +1,6 @@
 # encoding=utf-8
 '''
-@File    :   util.py    
+@File    :   utils.py
 @Contact :   jianbingxiaman@gmail.com
 @License :   (C)Copyright 2020-2021, John Hopcraft Lab-CV
 @Desciption : 
@@ -231,6 +231,7 @@ class MultiOutput(object):
     def __init__(self, task_outputs: []):
         self.task_outputs = task_outputs
         self.nb_outputs = len(self.task_outputs)
+        self.is_cuda = False
 
     def __getitem__(self, task_index):
         return self.task_outputs[task_index]
@@ -242,7 +243,9 @@ class MultiOutput(object):
         return self.nb_outputs
 
     def cuda(self, device):
-        self.task_outputs = [task_output.cuda(device) for task_output in self.task_outputs]
+        if not self.is_cuda:
+            self.is_cuda = True
+            self.task_outputs = [task_output.cuda(device) for task_output in self.task_outputs]
         return self
 
 
@@ -301,8 +304,7 @@ class MatrixItem(object):
         arg_maxs = preds
         if len(preds.shape) == 2:
             (max_vals, arg_maxs) = torch.max(preds.data, dim=1)
-        gts.squeeze_()
-        num_correct = torch.sum(gts == arg_maxs.long())
+        num_correct = torch.sum(gts.squeeze() == arg_maxs.long())
         acc = (num_correct * 100.0 / len(preds))
         return acc.item()
 
@@ -348,7 +350,7 @@ class TestMatrix(object):
         if dirname != '':
             mkdir(dirname)
         df = self.__get_df_matrix()
-        df.to_excel(path)
+        df.to_excel(path, index=False)
 
 
 def is_gpu_avaliable(opt):
@@ -417,11 +419,11 @@ def get_log_level(level: str) -> int:
     return level
 
 
-def relabel(targets):
+def relabel(labels):
     '''
     re-code the targets into range(0,len(targets))
     Args:
-        targets:
+        labels:
 
     Returns:
         recoded target2index
@@ -429,8 +431,8 @@ def relabel(targets):
     >>> relabel([1,5,3,6,7])
     {1: 0, 5: 1, 3: 2, 6: 3, 7: 4}
     '''
-    target2index = dict([(label, index) for index, label in enumerate(targets)])
-    return target2index
+    label2index = dict([(label, index) for index, label in enumerate(labels)])
+    return label2index
 
 
 def load_best_ckptname(ckpts_path):
@@ -466,3 +468,63 @@ class Checker(object):
 
             if data_name not in dataset_names:
                 raise ValueError(f'Dataset named {data_name} not found!')
+
+
+def exec_times(times):
+    def _exec_times(target):
+        _times = [0]
+
+        def _warp(*args, **kwargs):
+            if _times[0] >= times:
+                logging.warning(
+                    f'func {target.__name__} has been called {times} times, it will not be called and return None')
+                return None
+            ans = target(*args, **kwargs)
+            _times[0] += 1
+            return ans
+
+        return _warp
+
+    return _exec_times
+
+
+class ListDict(object):
+    def __init__(self, *keys):
+        self.dict = dict((k, []) for k in keys)
+
+    def load_data(self, D: 'Dict'):
+        assert isinstance(D, dict), f'Expected data in load_data is dict, but got {type(D)}'
+        ListDict.check_dict(D, error_raise=True)
+        self.dict = D
+
+    def insert_one_dict(self, item: 'dict,Bunch'):
+        for k in self.dict.keys():
+            if k in item:
+                self.dict[k].append(item[k])
+            else:
+                raise ValueError(f'Expected key in dict.keys({self.dict.keys()}), but got {item.keys()}')
+
+    def insert_one_kwargs(self, **kwargs):
+        self.insert_one_dict(dict(**kwargs))
+
+    def insert_items(self, items: 'dict,Bunch'):
+
+        ListDict.check_dict(items, error_raise=True)
+        for k in self.dict.keys():
+            if k in items:
+                self.dict[k].extend(items[k])
+            else:
+                raise ValueError(f'Expected key in dict.keys({self.dict.keys()}), but got {items.keys()}')
+
+    def convert2df(self):
+        return pd.DataFrame(self.dict)
+
+    @staticmethod
+    def check_dict(dict, error_raise=False):
+        """check the len of list on dict is all same or not"""
+
+        len_of_v = (len(v) for k, v in dict.items())
+        res = len(set(len_of_v)) == 1
+        if not res and error_raise:
+            raise ValueError(f'Expected the len of list on dict is all same, but got {len_of_v}')
+        return res

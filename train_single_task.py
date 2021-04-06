@@ -19,8 +19,8 @@ from torchvision.models import alexnet
 from models import BaseModel, create_model
 from options.train_options import TrainOptions
 from task_datasets import create_task_dataset, PseudoData
-from util.util import MatrixItem, MultiOutput
-from util.visualizer import Visualizer
+from utils.util import MatrixItem, MultiOutput
+from utils.visualizer import Visualizer
 
 
 class AlexnetNet(torch.nn.Module):

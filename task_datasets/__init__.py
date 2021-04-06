@@ -13,7 +13,7 @@ from collections import defaultdict
 
 from datasets import dataset_names
 from task_datasets.base_task_dataset import BaseTaskDataset
-from util.util import split2numclasses, MultiOutput
+from utils.util import split2numclasses, MultiOutput
 
 """This package contains losses_without_lambda related to objective functions, optimizations, and network architectures.
 
@@ -39,12 +39,14 @@ NB_MNIST = 10
 NB_CIFAR10 = 10
 NB_CIFAR100 = 100
 NB_IMAGENET = 1000
+NB_MINIIMAGENET = 100
 
 nc_datas = {
     'mnist':NB_MNIST,
     'cifar10':NB_CIFAR10,
     'cifar100':NB_CIFAR100,
     'imagenet':NB_IMAGENET,
+    'miniimagenet':NB_MINIIMAGENET,
 }
 
 
@@ -163,6 +165,10 @@ class PseudoData(object):
         self.opt = opt
         self._image = data.image
         self._target: 'Single Output' = data.target
+
+        self.cuda_image = False
+        self.cuda_target = False
+
         if pdatas is not None:
             pdatas[task_index] = data.target
             self._target: MultiOutput = pdatas
@@ -182,5 +188,9 @@ class PseudoData(object):
         if device is None:
             device = self.opt.device
 
-        self._image = self._image.cuda(device)
-        self._target = self._target.cuda(device)
+        if not self.cuda_image:
+            self.cuda_image = True
+            self._image = self._image.cuda(device)
+        if not self.cuda_target:
+            self.cuda_target = True
+            self._target = self._target.cuda(device)

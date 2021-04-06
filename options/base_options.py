@@ -10,7 +10,7 @@ import losses
 import models
 import networks
 import task_datasets
-from util.util import rmdirs, get_log_level, seed_everything, load_best_ckptname, Checker
+from utils.util import rmdirs, get_log_level, seed_everything, load_best_ckptname, Checker
 
 
 class BaseOptions(object):
@@ -44,6 +44,13 @@ class BaseOptions(object):
         parser.add_argument('--log_level', type=str, default="debug", help='logging level')
 
         # basic parameters
+        parser.add_argument('--model_name', type=str, default="falwf",
+                            choices=["finetune", "warmtune", "hottune", "folwf", "lwf", "tblwf", "nllwf", "fonllwf",
+                                     "falwf", "walwf", "halwf",
+                                     "etune", "tlwf",
+                                     "jointtrain"],
+                            help='model choice from finetune|warmtune|lwf|tblwf|nllwf|fonllwf|jointtrain', )
+
         parser.add_argument('--name', type=str, default='',
                             help='name of the experiment. opt.name=opt.model_name+"_"+opt.dataset_list')
         parser.add_argument('--device', type=str, default='cuda:0', help='cuda:0 or cpu')

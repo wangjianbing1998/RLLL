@@ -67,11 +67,13 @@ class TbLwfModel(BaseModel):
         self.plus_other_loss = True
         self.need_backward = True
 
-    def setup(self, task_index=0):
-        BaseModel.setup(self)  # call the initialization method of BaseModel
-        if task_index > 0:
-            # self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=True)
-            # self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=True)
-            pass
-        self.set_requires_grad(self.net_main.module.other_layers(task_index), requires_grad=True)
-        self.set_requires_grad(self.net_main.module.task_layer(task_index), requires_grad=True)
+    def setup(self, task_index=0, step=1):
+        if step == 1:
+            BaseModel.setup(self, task_index)  # call the initialization method of BaseModel
+            self.shared_fc_layers = True
+            self.shared_cnn_layers = True
+            self.other_layers = True
+            self.task_layer = True
+
+        else:
+            raise ValueError(f'tblwf Expected 1 == step, but got {step}')

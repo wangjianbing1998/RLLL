@@ -78,7 +78,7 @@ class JointTrainModel(BaseModel):
         self.need_backward = False
 
     def setup(self, task_index=0):
-        BaseModel.setup(self)  # call the initialization method of BaseModel
+        BaseModel.setup(self, task_index)  # call the initialization method of BaseModel
         if task_index > 0:
             # self.set_requires_grad(self.net_main.module.shared_cnn_layers, requires_grad=False)
             # self.set_requires_grad(self.net_main.module.shared_fc_layers, requires_grad=False)

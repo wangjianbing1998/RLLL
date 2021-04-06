@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from datasets import SimpleDataset, find_dataset_using_name
 from task_datasets import dataname2taskindex
 from task_datasets.base_task_dataset import BaseTaskDataset
-from util.util import log, flat_iterators, is_new_distributed_avaliable
+from utils.util import flat_iterators, is_new_distributed_avaliable
 
 
 class CustomTaskDataset(BaseTaskDataset):
@@ -45,7 +45,6 @@ class CustomTaskDataset(BaseTaskDataset):
 
         return parser
 
-    @log(level="debug")
     def _build_task_dataset(self):
         """build <self.task2dataset> """
         dataname2taskIndices = dataname2taskindex(self.dataset_list)
@@ -53,7 +52,7 @@ class CustomTaskDataset(BaseTaskDataset):
         # build task2dataset
         self.task2dataset = [SimpleDataset] * self.nb_tasks
         for data_name, indices in dataname2taskIndices.items():
-            datasets_gen: 'DataLoader' = self.create_splited_datasets(self.phase, data_name)
+            datasets_gen = self.create_splited_datasets(self.phase, data_name)
             for task_index in indices:
                 try:
                     self.task2dataset[task_index] = next(datasets_gen)
@@ -65,7 +64,13 @@ class CustomTaskDataset(BaseTaskDataset):
         return self.nb_tasks
 
     def __getitem__(self, task_index):
-        return self.task2dataset[task_index]
+
+        dataloader, simple_dataset = self.task2dataset[task_index]
+
+        simple_dataset.reset_relabels()
+
+        # print(f'task {task_index}: ',simple_dataset._dataset.relabels)
+        return dataloader
 
     def create_splited_datasets(self, phase, dataset_name) -> 'DataLoader':
         """create task_datasets on <dataset_name>, which has split into number of <nb_tasks>
@@ -88,4 +93,4 @@ class CustomTaskDataset(BaseTaskDataset):
                 data_loader = DataLoader(simple_dataset, batch_size=self.opt.batch_size, shuffle=True,
                                          num_workers=self.opt.num_workers,
                                          pin_memory=False if self.opt.num_workers < 4 else True)
-            yield data_loader
+            yield data_loader, simple_dataset

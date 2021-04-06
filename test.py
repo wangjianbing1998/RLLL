@@ -17,8 +17,8 @@ from sklearn.utils import Bunch
 from models import BaseModel, create_model
 from options.test_options import TestOptions
 from task_datasets import PseudoData, create_task_dataset
-from util.util import TestMatrix, MatrixItem
-from util.visualizer import Visualizer
+from utils.util import TestMatrix, MatrixItem
+from utils.visualizer import Visualizer
 
 
 def test(opt, test_datasets, model: BaseModel, train_index, visualizer=None):

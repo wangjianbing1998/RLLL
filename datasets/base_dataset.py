@@ -4,15 +4,14 @@ It also includes common transformation functions (e.g., get_transform, __scale_w
 """
 from abc import ABC
 
-import torch
 import torch.utils.data as data
 
 __all__ = ['BaseDataset']
 
-from PIL.Image import Image
+from PIL import Image
 from sklearn.utils import Bunch
 
-from util.util import is_gpu_avaliable, split2n
+from utils.util import split2n
 
 
 class BaseDataset(data.Dataset, ABC):
@@ -35,7 +34,15 @@ class BaseDataset(data.Dataset, ABC):
         self.isTrain = True if phase == 'train' else False
         self.phase = phase
         self.opt = opt
-        self.data_dir = None  # specified in sub-class
+
+        # specified in sub-class
+        self.data_dir = None
+        self._relabels = None
+        self.data = None
+        self.x_transforms = None
+        self.target2label = None
+        self.label2Indices = None
+        self._labels = None
 
     @staticmethod
     def modify_commandline_options(parser, isTrain):
@@ -62,6 +69,7 @@ class BaseDataset(data.Dataset, ABC):
         parser.add_argument('--cifar10_dataset_dir', type=str, default='./data/CIFAR10/')
         parser.add_argument('--cifar100_dataset_dir', type=str, default='./data/CIFAR100/')
         parser.add_argument('--imagenet_dataset_dir', type=str, default='/home/lichao/circle_conv/dataset/imagenet/')
+        parser.add_argument('--miniimagenet_dataset_dir', type=str, default='./data/MINIImageNet/')
 
         parser.add_argument('--load_dataset_mode', type=str, default='reader',
                             help="the mode for load dataset, 'dir' for directory loading or 'reader' for pytorch.data",
@@ -69,16 +77,19 @@ class BaseDataset(data.Dataset, ABC):
 
         return parser
 
+    @property
+    def relabels(self):
+        return self._relabels
+
+    @relabels.setter
+    def relabels(self, value):
+        self._relabels = value
+
     def __getitem__(self, item):
         """Get items on label index
 
         """
-        if len(item) == 2:
-            data_index, relabels = item
-        else:
-            raise ValueError(f'relabels assignment error, please check SimpleDataset.__getitem__(item)')
-
-        data = self.data[data_index]
+        data = self.data[item]
         if self.opt.load_dataset_mode == 'dir':
             image_path, target = data.image_path, data.target
             image = Image.open(image_path)
@@ -93,15 +104,10 @@ class BaseDataset(data.Dataset, ABC):
         if self.x_transforms is not None:
             image = self.x_transforms(image)
 
-        target = relabels[self.target2label[target]]
+        target = self._relabels[self.target2label[target]]
 
-        if self.y_transforms is not None:
-            target = self.y_transforms(target)
-        target = torch.LongTensor([target])
-        # target = target.long()
-        if is_gpu_avaliable(self.opt):
-            image = image.to(self.opt.device)
-            target = target.to(self.opt.device)
+        # if self.y_transforms is not None:
+        #     target = self.y_transforms(target)
         return Bunch(image=image,
                      target=target)
 

@@ -19,7 +19,7 @@ from torchvision.transforms import transforms
 
 from VARIABLES import IMAGENET
 from datasets import BaseDataset
-from util.util import split2n, is_gpu_avaliable
+from utils.util import split2n, is_gpu_avaliable
 
 
 class ImagenetDataset(BaseDataset):

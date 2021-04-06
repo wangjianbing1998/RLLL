@@ -19,11 +19,10 @@ import numpy as np
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
-from sklearn.utils import Bunch
 from torch.utils import data
 
 from datasets.base_dataset import BaseDataset
-from util.util import relabel
+from utils.util import relabel
 
 dataset_names = [dir.replace("_dataset.py", "").lower() for dir in
                  os.listdir(os.path.dirname(os.path.abspath(__file__))) if
@@ -60,6 +59,7 @@ def get_option_setter(dataset_name):
     return dataset_class.modify_commandline_options
 
 
+
 class SimpleDataset(data.Dataset):
     """Get Task-Labeled DataItem accroding to the index inside original dataset"""
 
@@ -73,20 +73,15 @@ class SimpleDataset(data.Dataset):
             import random
             random.shuffle(self._data_index)
 
-        self._relabels = relabel(labels)
+        self.relabels = relabel(labels)
 
-    @property
-    def relabels(self):
-        return self._relabels
-
-    @relabels.setter
-    def relabels(self, value):
-        self._relabels = value
+    def reset_relabels(self):
+        self._dataset.relabels = self.relabels
 
     def __getitem__(self, item):
         index = self._data_index[item]
-        data = self._dataset[(index, self._relabels)]
-        return Bunch(data=data, data_name=self.data_name, relabels=self._relabels)
+        data = self._dataset[index]
+        return data
 
     def __len__(self):
         return len(self._data_index)
@@ -218,7 +213,6 @@ def prepare_datas_by_standard_data(d: 'torchvision.datasets.XXXX'):
     labels = d.classes
     label2target = d.class_to_idx
     target2label = dict([(target, label) for label, target in label2target.items()])
-
     label2Indices = defaultdict(list)
     for index, target in enumerate(d.targets):
         if isinstance(target, torch.Tensor):

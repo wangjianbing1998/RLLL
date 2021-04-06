@@ -15,7 +15,7 @@ from typing import List, Tuple
 from sklearn.utils import Bunch
 
 from task_datasets import PseudoData, create_task_dataset
-from util.util import TestMatrix, MatrixItem
+from utils.util import TestMatrix, MatrixItem
 
 """General-purpose training script for multi-task learning(or LifeLong Learning) translation.
 
@@ -40,7 +40,7 @@ import time
 
 from models import create_model, BaseModel
 from options.train_options import TrainOptions
-from util.visualizer import Visualizer
+from utils.visualizer import Visualizer
 
 
 # @torchsnooper.snoop()
@@ -53,6 +53,7 @@ def fit(opt,
         visualizer=None,
         ):
     model.continued_task_index = continued_task_index
+
     logging.info(f"Fitting task {task_index}")
     best_matrix_item = None
     for epoch in range(opt.epoch_start, opt.n_epochs + opt.n_epochs_decay + 1):  # outer loop for different epochs;
@@ -61,7 +62,7 @@ def fit(opt,
         total_loss = 0
         n_batch = 0
         for data in train_dataset:  # inner loop within one epoch
-            previous_data: 'image,SingleOutput' = PseudoData(opt, Bunch(**data["data"]))
+            previous_data: 'image,SingleOutput' = PseudoData(opt, Bunch(**data))
             model.set_data(previous_data)
             model.test(visualizer=visualizer)  # Get model.output
             '''
@@ -98,13 +99,13 @@ def fit(opt,
         model.update_learning_rate()  # update learning rates at the end of every epoch.
 
 
-def train(opt, model, task_index, continued_task_index, train_dataset, val_dataset=None, visualizer=None):
+def train(opt, model, task_index, continued_task_index, train_datasets, val_datasets=None, visualizer=None):
     fit(opt,
         model=model,
         task_index=task_index,
         continued_task_index=continued_task_index,
-        train_dataset=train_dataset,
-        val_dataset=val_dataset,
+        train_dataset=train_datasets[continued_task_index],
+        val_dataset=val_datasets[continued_task_index],
         visualizer=visualizer)
 
     if model.need_backward and task_index >= 1:
@@ -113,8 +114,8 @@ def train(opt, model, task_index, continued_task_index, train_dataset, val_datas
               model=model,
               task_index=task_index - 1,
               continued_task_index=continued_task_index,
-              train_dataset=train_dataset,
-              val_dataset=val_dataset,
+              train_datasets=train_datasets,
+              val_datasets=val_datasets,
               visualizer=visualizer,
               )
 
@@ -139,7 +140,7 @@ def val(val_dataset: 'Single task_dataset', model: BaseModel, task_index, visual
 
     matrixItems = []
     for i, data in enumerate(val_dataset):  # inner loop within one epoch
-        model.set_data(PseudoData(opt, Bunch(**data["data"])))
+        model.set_data(PseudoData(opt, Bunch(**data)))
         model.test(visualizer)
         # Add matrixItem result
         matrixItems.append(model.get_matrix_item(task_index))
@@ -159,8 +160,6 @@ if __name__ == '__main__':
     visualizer = Visualizer(opt)
     visualizer.setup()  # regular setup:
 
-    # visualizer.add_graph(model,) TODO the model graph visualization
-
     train_datasets = create_task_dataset(opt, phase="train")
     val_datasets = create_task_dataset(opt, phase="val")
     test_datasets = create_task_dataset(opt, phase="test")
@@ -171,17 +170,29 @@ if __name__ == '__main__':
     test(opt, test_datasets, model, train_index=0, visualizer=visualizer)
 
     for task_index in range(nb_tasks):
-        task_dataset = train_datasets[task_index]
-        val_dataset = val_datasets[task_index]
+        # task_dataset = train_datasets[task_index]
+        # val_dataset = val_datasets[task_index]
         model.setup(task_index)  # regular setup: load and print networks; create schedulers before training each task
         train(opt,
               model=model,
               task_index=task_index,
               continued_task_index=task_index,
-              train_dataset=task_dataset,
-              val_dataset=val_dataset,
+              train_datasets=train_datasets,
+              val_datasets=val_datasets,
               visualizer=visualizer,
               )
+
+        if 'alwf' in opt.model_name:
+            model.setup(task_index, step=2)
+            train(opt,
+                  model=model,
+                  task_index=task_index,
+                  continued_task_index=task_index,
+                  train_datasets=train_datasets,
+                  val_datasets=val_datasets,
+                  visualizer=visualizer,
+                  )
+
         test(opt, test_datasets, model, train_index=task_index + 1, visualizer=visualizer)
 
     test_matrix.save_matrix(os.path.join(opt.result_dir, f'{opt.name}.xlsx'))

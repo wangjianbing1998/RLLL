@@ -30,7 +30,9 @@ class Cifar100Dataset(BaseDataset):
         if phase == "val":
             phase = "test"
 
+        opt.load_dataset_mode = 'reader'
         super(Cifar100Dataset, self).__init__(opt, phase)
+
         self.data_dir = opt.cifar100_dataset_dir
 
         self.data_name = CIFAR100

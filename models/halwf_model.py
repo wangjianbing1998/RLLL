@@ -1,3 +1,13 @@
+# encoding=utf-8
+'''
+@File    :   alwf_model.py    
+@Contact :   jianbingxiaman@gmail.com
+@License :   (C)Copyright 2020-2021, John Hopcraft Lab-CV
+@Desciption : 
+@Modify Time      @Author    @Version
+------------      -------    --------
+2021/3/29 21:11   jianbingxia     1.0    
+'''
 import torch
 
 from losses import create_loss
@@ -5,7 +15,7 @@ from models.base_model import BaseModel
 from networks import create_net
 
 
-class NlLwfModel(BaseModel):
+class HalwfModel(BaseModel):
 
     @staticmethod
     def modify_commandline_options(parser):
@@ -64,16 +74,21 @@ class NlLwfModel(BaseModel):
             not backward
         """
 
-        self.plus_other_loss = False
-        self.need_backward = False
+        self.plus_other_loss = True
+        self.need_backward = True
 
     def setup(self, task_index=0, step=1):
         if step == 1:
             BaseModel.setup(self, task_index)  # call the initialization method of BaseModel
+
             self.shared_fc_layers = True
             self.shared_cnn_layers = True
             self.other_layers = True
             self.task_layer = True
-
+        elif step == 2:
+            self.shared_fc_layers = True
+            self.shared_cnn_layers = True
+            self.other_layers = True
+            self.task_layer = False
         else:
-            raise ValueError(f'nllwf Expected 1 == step, but got {step}')
+            raise ValueError(f'halwf Expected 1<=step<=2, but got {step}')

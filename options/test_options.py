@@ -12,10 +12,6 @@ class TestOptions(BaseOptions):
     def initialize(self, parser):
         parser = BaseOptions.initialize(self, parser)  # define shared options
         # name specifics
-        parser.add_argument('--model_name', type=str, default="tblwf",
-                            choices=["finetune", "warmtune", "hottune", "folwf", "lwf", "tblwf", "nllwf", "fonllwf",
-                                     "jointtrain"],
-                            help='model choice from finetune|warmtune|lwf|tblwf|nllwf|fonllwf|jointtrain', )
         parser.add_argument('--task_dataset_name', type=str, default="custom", choices=["custom"],
                             help='task dataset choice from custom', )
 

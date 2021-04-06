@@ -15,7 +15,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from util.util import MultiOutput
+from utils.util import MultiOutput
 
 __all__ = ['BaseLoss', 'KDLoss']
 
