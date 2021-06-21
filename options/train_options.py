@@ -17,11 +17,16 @@ class TrainOptions(BaseOptions):
                             help='task dataset choice from custom', )
         parser.add_argument('--continue_train', action="store_true", help="if continuely train the model or not")
 
-        parser.add_argument('--log_filename', type=str, default="output/train_{}.txt", help='logging filename')
+        parser.add_argument('--log_filename', type=str, default="output/{}_train.txt", help='logging filename')
         # parser.add_argument('--log_filename', type=str, default=None, help='logging filename')
 
         # experiment specifics
         parser.add_argument('--seed', type=int, default=42)
+
+        # training labeled dataset ratio
+        parser.add_argument('--labeled_ratio', type=float, default=1.,
+                            help='the labeled ratio of per dataset, 1-labeled_ratio is the unlabeled ratio')
+        parser.add_argument('--unlabeled', action='store_true', help='use unlabeled model or not')
 
         # training specifics
 
@@ -32,6 +37,9 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--save_best', type=bool, default=True, help='if save the best model or not')
         parser.add_argument('--load_taskindex', type=int, default=0,
                             help='which trained-to-task_index model to load? set to latest to use best cached model')
+        parser.add_argument('--load_step', type=int, default=1,
+                            help='which trained-to-step model to load? set to latest step model')
+
         parser.add_argument('--load_epoch', type=str, default='best',
                             help='which epoch to load? set to latest to use best cached model')
         # training before
@@ -52,7 +60,7 @@ class TrainOptions(BaseOptions):
                             help='frequency of saving checkpoints at the end of epochs')
 
         # model and optimizer
-        parser.add_argument('--optimizer_type', type=str, default='adam', choices=["sgd", "adam"],
+        parser.add_argument('--optimizer_type', type=str, default='adamw', choices=["sgd", "adam", 'adamw'],
                             help='Name of the optimizer')
         parser.add_argument('--beta1', type=float, default=0.5, help='momentum term of adam')
         parser.add_argument('--gamma', type=float, default=0.1)
@@ -60,11 +68,19 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--lr', type=float, default=1e-4, help='initial learning rate for adam')
         parser.add_argument('--pool_size', type=int, default=50,
                             help='the size of image buffer that stores previously generated images')
-        parser.add_argument('--lr_policy', type=str, default='plateau',
-                            help='learning rate policy. [linear | step | plateau | cosine]')
+        parser.add_argument('--lr_policy', type=str, default='cyclic',
+                            help='learning rate policy. [linear | step | plateau | cosine|cyclic]')
         parser.add_argument('--lr_decay_iters', type=int, default=50,
                             help='multiply by a gamma every lr_decay_iters iterations')
-
         parser.add_argument('--result_dir', type=str, default='./train_results/', help='saves results here.')
+        parser.add_argument('--amp', action='store_true', help='where to use amp or not')
+
         self.isTrain = True
         return parser
+
+    def default_value(self, opt):
+        opt = BaseOptions.default_value(self, opt)
+
+        opt.log_filename = opt.log_filename.strip().lower()
+
+        return opt

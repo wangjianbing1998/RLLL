@@ -17,7 +17,7 @@ from sklearn.utils import Bunch
 from models import BaseModel, create_model
 from options.test_options import TestOptions
 from task_datasets import PseudoData, create_task_dataset
-from utils.util import TestMatrix, MatrixItem
+from utils.util import TestMatrix, MatrixItem, my_sum
 from utils.visualizer import Visualizer
 
 
@@ -46,7 +46,7 @@ def val(opt, val_dataset, model: BaseModel, task_index, visualizer=None) -> Matr
         model.test(visualizer)
         matrixItems.append(model.get_matrix_item(task_index))
 
-    res = sum(matrixItems, MatrixItem()(accuracy=0, loss=0))
+    res = my_sum(matrixItems)
     res = res / len(matrixItems)
     logging.info(f"Validation Time Taken: {time.time() - start_time} sec")
     return res
@@ -70,4 +70,4 @@ if __name__ == '__main__':
     test_matrix = TestMatrix()
     test(opt, test_datasets, model, train_index=0, visualizer=visualizer)
 
-    test_matrix.save_matrix(os.path.join(opt.result_dir, f'{opt.name}.xlsx'))
+    test_matrix.save_matrix(os.path.join(opt.result_dir, '-'.join(opt.dataset_list), f'{opt.name}.xlsx'))

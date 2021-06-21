@@ -3,23 +3,23 @@ from models.base_model import BaseModel
 from networks import create_net
 
 
-class FinetuneModel(BaseModel):
+class EtuneModel(BaseModel):
 
-    @staticmethod
-    def modify_commandline_options(parser):
-        """Add new dataset-specific options, and rewrite default values for existing options.
+	@staticmethod
+	def modify_commandline_options(parser):
+		"""Add new dataset-specific options, and rewrite default values for existing options.
 
-        num_classes is the number of classes  per task
-        for example, num_classes = [10,10,10], means the number of classes on taks1 is 10, and then so on.
+		num_classes is the number of classes  per task
+		for example, num_classes = [10,10,10], means the number of classes on taks1 is 10, and then so on.
 
-        Parameters:
-            parser          -- original option parser
+		Parameters:
+			parser          -- original option parser
 
 
-        Returns:
-            the modified parser.
+		Returns:
+			the modified parser.
 
-        """
+		"""
 		parser.add_argument('--net_name', type=str, default="alexnet", choices=["alexnet", "imagenet"],
 							help='network select from alexnet|imagenet', )
 		parser.add_argument('--loss_name', type=str, default="total", choices=["total"],
@@ -59,15 +59,23 @@ class FinetuneModel(BaseModel):
 
 		self.plus_other_loss = False
 		self.need_backward = False
-		self.max_step = 1
 
-    def setup(self, task_index=0, step=1):
-        if step == 1:
-            BaseModel.setup(self, task_index)  # call the initialization method of BaseModel
+		self.max_step = 2
 
-            self.shared_fc_layers = False
-            self.shared_cnn_layers = False
-            self.other_layers = False
-            self.task_layer = True
-        else:
-			raise ValueError(f'finetune Expected 1<=step<={self.max_step}, but got {step}')
+	def setup(self, task_index=0, step=1):
+		if step == 1:
+			BaseModel.setup(self, task_index)  # call the initialization method of BaseModel
+
+			self.shared_fc_layers = False
+			self.shared_cnn_layers = False
+			self.other_layers = False
+			self.task_layer = True
+
+		elif step == 2:
+			self.shared_fc_layers = False
+			self.shared_cnn_layers = False
+			self.other_layers = True
+			self.task_layer = False
+
+		else:
+			raise ValueError(f'easytuneing Expected 1<=step<={self.max_step}, but got {step}')

@@ -58,10 +58,9 @@ def find_model_using_name(model_name):
     return model
 
 
-def get_option_setter(model_name):
+def get_cls(model_name):
     """Return the static method <modify_commandline_options> of the model class."""
-    model_class = find_model_using_name(model_name)
-    return model_class.modify_commandline_options
+    return find_model_using_name(model_name)
 
 
 def create_model(opt):

@@ -57,11 +57,9 @@ def find_loss_using_name(loss_name):
 
     return loss
 
-
-def get_option_setter(loss_name):
+def get_cls(loss_name):
     """Return the static method <modify_commandline_options> of the loss class."""
-    return find_loss_using_name(loss_name).modify_commandline_options
-
+    return find_loss_using_name(loss_name)
 
 def create_loss(opt):
     """Create a model given the option.

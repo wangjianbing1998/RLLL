@@ -16,13 +16,14 @@ import os
 from collections import defaultdict
 
 import numpy as np
-import torch
 import torchvision.transforms as transforms
 from PIL import Image
+from prefetch_generator import BackgroundGenerator
 from torch.utils import data
+from torch.utils.data import DataLoader
 
 from datasets.base_dataset import BaseDataset
-from utils.util import relabel
+from utils.util import retarget
 
 dataset_names = [dir.replace("_dataset.py", "").lower() for dir in
                  os.listdir(os.path.dirname(os.path.abspath(__file__))) if
@@ -53,38 +54,59 @@ def find_dataset_using_name(dataset_name):
     return dataset
 
 
-def get_option_setter(dataset_name):
+def get_cls(dataset_name):
     """Return the static method <modify_commandline_options> of the dataset class."""
-    dataset_class = find_dataset_using_name(dataset_name)
-    return dataset_class.modify_commandline_options
-
+    return find_dataset_using_name(dataset_name)
 
 
 class SimpleDataset(data.Dataset):
     """Get Task-Labeled DataItem accroding to the index inside original dataset"""
 
-    def __init__(self, data_index, dataset, labels, shuffle=False):
-        self._data_index = data_index
+    data_name = None
+    len_data = None
+
+    def __repr__(self) -> str:
+        return f'(dataset={self.data_name}, datasize={self.len_data})'
+
+    def __init__(self, dataset, targets, data_indices=None, shuffle=False):
+        self._data_indices = data_indices
         self._dataset = dataset
         self.data_name = dataset.data_name
         self.shuffle = shuffle
 
-        if self.shuffle:
+        if self.shuffle and data_indices is not None:
             import random
-            random.shuffle(self._data_index)
+            random.shuffle(self._data_indices)
 
-        self.relabels = relabel(labels)
+        if data_indices is None:
+            self.len_data = len(dataset)
+        else:
+            self.len_data = len(self._data_indices)
+
+        self.retargets = retarget(targets)
+
+        logging.debug(f'SimpleDataset({dataset}) Contructed')
 
     def reset_relabels(self):
-        self._dataset.relabels = self.relabels
+        self._dataset.retargets = self.retargets
 
-    def __getitem__(self, item):
-        index = self._data_index[item]
+    def __getitem__(self, index):
+        """ if `self._data_indices is None`, it will get all dataset,
+        so the index of `self._data_indices` is similar to the index of `self._dataset`"""
+
+        if self._data_indices is not None:
+            index = self._data_indices[index]
         data = self._dataset[index]
         return data
 
     def __len__(self):
-        return len(self._data_index)
+        return self.len_data
+
+
+class DataLoaderX(DataLoader):
+
+    def __iter__(self):
+        return BackgroundGenerator(super().__iter__())
 
 
 def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, convert=True):
@@ -208,7 +230,7 @@ def prepare_datas_by_standard_data(d: 'torchvision.datasets.XXXX'):
         label2target, {str:int}
 
     """
-
+    import torch
     data = d
     labels = d.classes
     label2target = d.class_to_idx
@@ -220,3 +242,30 @@ def prepare_datas_by_standard_data(d: 'torchvision.datasets.XXXX'):
         label2Indices[target2label[target]].append(index)
 
     return data, labels, label2Indices, label2target, target2label
+
+
+class FolderDataset(data.Dataset):
+
+    def __init__(self, label2filepaths):
+        self.classes = list(set(label2filepaths.keys()))
+        self.class_to_idx = dict([(label, target) for target, label in enumerate(self.classes)])
+
+        self.data, self.targets = self.build_data(label2filepaths)
+        logging.debug(f'FolderDataset has been loaded')
+
+    def __getitem__(self, item):
+        image_path, target = self.data[item]
+        return image_path, target
+
+    def __len__(self):
+        return len(self.data)
+
+    def build_data(self, label2filepaths):
+        data = []
+        targets = []
+        for label, filepaths in label2filepaths.items():
+            for filepath in filepaths:
+                data.append((filepath, self.class_to_idx[label]))
+                targets.append(self.class_to_idx[label])
+
+        return data, targets

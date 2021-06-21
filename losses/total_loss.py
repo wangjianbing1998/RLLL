@@ -48,6 +48,10 @@ class TotalLoss(BaseLoss):
 
         return parser
 
+    @staticmethod
+    def default_value(opt):
+        return opt
+
     def __call__(self, preds: Union[MultiOutput, torch.Tensor],
                  gts: Union[MultiOutput, torch.Tensor], task_index=None) -> 'loss Tensor':
         """calculate the losses_without_lambda on multi-task or single task
@@ -74,7 +78,12 @@ class TotalLoss(BaseLoss):
                     else:
                         continue
                 else:
-                    loss = self.ce_loss(prediction, target.squeeze()).cuda()
+                    # if judge_tensor_value_is_long(target): # target is the ground truth
+                    if len(target.size()) == 1:  # target is the ground truth
+                        loss = self.ce_loss(prediction, target).cuda()
+                    else:  # target is the model(xs), prediction ~= target
+                        loss = self.kd_loss(prediction, target).cuda()
+
                 self.losses_without_lambda.append(loss)
 
             self.losses_with_lambda = self.losses_without_lambda  # TODO implement the losses_with_lambda

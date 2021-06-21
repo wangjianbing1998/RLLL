@@ -29,15 +29,21 @@ class TestOptions(BaseOptions):
         parser.add_argument('--load_taskindex', type=int, default=0,
                             help='which trained-to-task_index model to load? set to latest to use best cached model')
 
-        # for setting inputs
-
-        # model and optimizer
+        parser.add_argument('--load_step', type=int, default=1,
+                            help='which trained-to-step model to load? set to latest step model')
 
         parser.add_argument('--pool_size', type=int, default=50,
                             help='the size of image buffer that stores previously generated images')
 
         parser.add_argument('--result_dir', type=str, default='./test_results/', help='saves results here.')
 
-        parser.set_defaults(preffix='test')
+        parser.set_defaults(preffix='test_')
         self.isTrain = False
         return parser
+
+    def default_value(self, opt):
+        opt = BaseOptions.default_value(self, opt)
+
+        opt.log_filename = opt.log_filename.strip().lower()
+
+        return opt

@@ -8,23 +8,23 @@
 ------------      -------    --------
 2021/1/24 17:14   jianbingxia     1.0    
 '''
-import os
-from collections import defaultdict
+import random
+
+random.seed(42)
 
 import pandas as pd
-import seaborn as sns
-
-from utils.util import ListDict
 
 pd.set_option('expand_frame_repr', False)
 pd.set_option('display.max_rows', 20)
 pd.set_option('precision', 2)
+
 import matplotlib.pyplot as plt
 import torch
 from tensorboardX import SummaryWriter
 
 plt.rcParams['font.sans-serif'] = 'SimHei'
 plt.rcParams['axes.unicode_minus'] = False
+plt.rcParams['figure.max_open_warning'] = 50
 
 
 class Visualizer(object):
@@ -46,12 +46,12 @@ class Visualizer(object):
     def add_losses(self, losses, epoch):
         """add losses for FloatTensor or list of FloatTensor
 
-        such as
-        losses_with_lambda: [losses_with_lambda[index] for index in range(nb_tasks)]
-        losses_without_lambda: [losses_without_lambda[index] for index in range(nb_tasks)]
-        loss_total: FloatTensor
+		such as
+		losses_with_lambda: [losses_with_lambda[index] for index in range(nb_tasks)]
+		losses_without_lambda: [losses_without_lambda[index] for index in range(nb_tasks)]
+		loss_total: FloatTensor
 
-        """
+		"""
         from utils.util import is_gpu_avaliable
         for loss_name, loss in losses.items():
             if isinstance(loss, torch.FloatTensor if not is_gpu_avaliable(self.opt) else torch.cuda.FloatTensor):
@@ -78,141 +78,67 @@ class Visualizer(object):
         self.summary_writer.close()
 
 
-class ResultVisualizer(object):
-    MODEL_STYLE = {
-        'tblwf':'k*',
-        'finetune':'b.',
-        'warmtune':'go',
-        'hottune':'rv',
-        'lwf':'y^',
-        'folwf':'m<',
-        'nllwf':'c1',
-        'fonllwf':'mp',
-        'jt':'pink|',
-        'falwf':'r^',
-    }
+class MetrixResult(object):
+    def __init__(self, df, shift_column=True):
+        self.df = df
+        self.T = len(df) - 1
+        self.shift = 0
+        if shift_column:
+            self.shift = 1
 
-    KEYS = ['tblwf', 'finetune', 'warmtune', 'hottune', 'lwf', 'folwf', 'nllwf', 'fonllwf', 'falwf', 'jt']
-    assert len(KEYS) == len(MODEL_STYLE)
+        self._backward_transfer = self.__backward_transfer()
+        self._farward_transfer = self.__farward_transfer()
+        self._average_accuracy = self.__average_accuracy()
 
-    def __init__(self, dir_path, result_path):
+    @property
+    def backward_transfer(self):
+        return self._backward_transfer
 
-        self.result_path = result_path
-        self.defaultdict = defaultdict(list)
-        models = set()
-        dfs = defaultdict(list)
+    @property
+    def farward_transfer(self):
+        return self._farward_transfer
 
-        for file in os.listdir(dir_path):
-            if file.endswith('.csv'):
-                model, dataset_list = file.split('_')
-                datasetlist_str = dataset_list.replace('.csv', '')
-                dataset_list = datasetlist_str.split('-')
-                file = os.path.join(dir_path, file)
-                df = pd.read_csv(file)
-                dfs[datasetlist_str].append((model, df))
-                nb_tasks = len(dataset_list)
-                ys = [df[str(task)].values.tolist() for task in range(1, nb_tasks + 1)]
-                self.defaultdict[datasetlist_str].append((model, ys))
-                models.add(model)
-        for datasetlist_str, model_ys in self.defaultdict.items():
-            dataset_list = datasetlist_str.split('-')
+    @property
+    def average_accuracy(self):
+        return self._average_accuracy
 
-            # fig = plt.figure(figsize=(10, 10))
-            # self.plot_line(dataset_list, datasetlist_str, fig, model_ys, models)
-            # plt.savefig(datasetlist_str + '_line.png')
-            # plt.show()
+    def __repr__(self):
+        return f'bt={self.backward_transfer}, ft={self.farward_transfer}, aa={self.average_accuracy}'
 
-            fig = plt.figure(figsize=(10, 10))
-            self.plot_bar(dataset_list, datasetlist_str, fig, model_ys)
-            plt.savefig(datasetlist_str + '_bar.png')
-            plt.show()
+    def __getitem__(self, item):
+        assert len(item) == 2, f'Expected len(item)==2, but got {item}'
+        row_index, col_index = item
+        col_index -= self.shift
+        return self.df.iloc[(row_index, col_index)]
 
-            # df = dfs[datasetlist_str]
-            # df.sort(key=lambda x:self.KEYS.index(x[0]))
-            # res = self.concat_df(df)
-            # res.to_csv(f"{datasetlist_str}_" + self.result_path)
+    def __backward_transfer(self):
+        """
 
-    def plot_line(self, dataset_list, datasetlist_str, fig, model_ys, models):
-        axes = fig.subplots(len(dataset_list), 1, sharex=True)
-        for model, ys in model_ys:
-            self.ax_plot_line(axes, ys, y_labels=dataset_list, model=model)
+		>>> result=MetrixResult(pd.DataFrame({0:[0,1,2,3,4],1:[10,11,12,13,14],2:[20,21,22,23,24],3:[30,31,32,33,34],4:[40,41,42,43,44]}))
+		>>> result.backward_transfer()
+		2.0
 
-        ax = axes[-1]
-        ax.set_xlabel('Trained Tasks')
-        x_ticks = ['Random'] + dataset_list
-        if 'tblwf' in models:
-            x_ticks += dataset_list[-2::-1]
-        ax.set_xticks(range(len(x_ticks)))
-        ax.set_xticklabels(x_ticks)
+		"""
+        ans = [self[(self.T, i)] - self[(i, i)] for i in range(1, self.T)]
+        return sum(ans) / len(ans)
 
-        axes[0].legend(loc='best')
-        axes[0].set_title(datasetlist_str)
+    def __farward_transfer(self):
+        """
 
-    def plot_bar(self, dataset_list, datasetlist_str, fig, model_ys):
-        test_score_df = ListDict('model', 'train_dataset', 'test_dataset', 'test_score')
-        for model, ys in model_ys:
-            for test_index, Y in enumerate(ys):
-                test_dataset = dataset_list[test_index]
-                if 'tblwf' == model:
-                    # Reconstruct the `Random, TASK_1, Task_2, Task_3`
-                    Y = [Y[0]] + Y[-1:- len(dataset_list) - 1:-1]
-                for train_index, y in enumerate(Y):
-                    if train_index == 0:
-                        train_dataset = 'Random'
-                    else:
-                        train_dataset = dataset_list[train_index - 1]
+		>>> result=MetrixResult(pd.DataFrame({0:[0,1,2,3,4],1:[10,11,12,13,14],2:[20,21,22,23,24],3:[30,31,32,33,34],4:[40,41,42,43,44]}))
+		>>> result.farward_transfer()
+		2.0
 
-                    test_score_df.insert_one_kwargs(model=model, train_dataset=train_dataset, test_dataset=test_dataset,
-                                                    test_score=y)
-        test_score_df = test_score_df.convert2df()
+		"""
+        ans = [self[(i - 1, i)] - self[(0, i)] for i in range(2, self.T + 1)]
+        return sum(ans) / len(ans)
 
-        axes = fig.subplots(len(dataset_list), 1, sharex=True)
-        for index, test_dataset in enumerate(dataset_list):
-            df = test_score_df[test_score_df['test_dataset'] == test_dataset]
-            df.drop(columns=['test_dataset'], inplace=True)
-            self.ax_plot_bar(axes[index], df, test_dataset)
+    def __average_accuracy(self):
+        """
 
-        ax = axes[-1]
-        ax.set_xlabel('Trained Tasks')
-        # x_ticks = ['Random'] + dataset_list
-
-        # ax.set_xticks(range(len(x_ticks)))
-        # ax.set_xticklabels(x_ticks)
-
-        axes[0].legend(loc='best')
-        axes[0].set_title(datasetlist_str)
-
-    def concat_df(self, dfs):
-        res = pd.DataFrame({"1":[], "2":[], "3":[]})
-
-        for model, df in dfs:
-            print(model)
-            res = pd.concat([res, df], axis=0, )
-
-        return res
-
-    def ax_plot_line(self, axes, ys, y_labels, model):
-
-        assert len(y_labels) == len(ys), f'Expected len({ys}) == len({y_labels}), but got ys={ys}, y_labels={y_labels}'
-        y_style = self.MODEL_STYLE[model]
-
-        nb_tasks = len(ys)
-
-        for task_index in range(nb_tasks):
-            ax = axes[task_index]
-            ax.plot(range(len(ys[task_index])), ys[task_index], y_style + '-', label=model)
-
-            ax.set_ylabel(y_labels[task_index])
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-
-    def ax_plot_bar(self, ax, df, test_dataset):
-
-        sns.barplot(ax=ax, x='train_dataset', y='test_score', hue='model', data=df)
-        ax.set_title(f'Test in {test_dataset}')
-        ax.set_xlabel('')
-        ax.get_legend().set_visible(False)
-
-
-if __name__ == '__main__':
-    ResultVisualizer(r'../train_results', 'results.csv')
+		>>> result=MetrixResult(pd.DataFrame({0:[0,1,2,3,4],1:[10,11,12,13,14],2:[20,21,22,23,24],3:[30,31,32,33,34],4:[40,41,42,43,44]}))
+		>>> result.average_accuracy()
+		29.0
+		"""
+        ans = [self[(self.T, i)] for i in range(1, self.T + 1)]
+        return sum(ans) / len(ans)

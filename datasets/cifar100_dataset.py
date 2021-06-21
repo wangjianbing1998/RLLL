@@ -37,13 +37,22 @@ class Cifar100Dataset(BaseDataset):
 
         self.data_name = CIFAR100
 
-        self.x_transforms = transforms.Compose(
+        self.x_transforms_train = transforms.Compose(
             [
+                transforms.RandomHorizontalFlip(p=0.5),
+                transforms.ColorJitter(brightness=0.24705882352941178),
                 transforms.Resize((opt.imsize, opt.imsize)),
                 transforms.ToTensor(),
-                transforms.Normalize((0.5,), (1.0,))
+                transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))
             ]
         )
+
+        self.x_transforms_test = transforms.Compose([
+            transforms.Resize((opt.imsize, opt.imsize)),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761))
+        ])
+
         self.y_transforms = None
         if self.opt.load_dataset_mode == 'dir':
 
@@ -77,3 +86,7 @@ class Cifar100Dataset(BaseDataset):
                 dataset)
         else:
             raise ValueError(f"Expected load_dataset_mode in [dir,reader], but got {self.opt.load_dataset_mode}")
+
+    def set_max_dataset_size(self):
+        super().set_max_dataset_size()
+        self.max_dataset_size = 500  # number of images per class

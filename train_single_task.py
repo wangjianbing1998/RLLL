@@ -19,7 +19,7 @@ from torchvision.models import alexnet
 from models import BaseModel, create_model
 from options.train_options import TrainOptions
 from task_datasets import create_task_dataset, PseudoData
-from utils.util import MatrixItem, MultiOutput
+from utils.util import MatrixItem, MultiOutput, my_sum
 from utils.visualizer import Visualizer
 
 
@@ -52,8 +52,8 @@ class Model():
         self.loss_criterion = torch.nn.CrossEntropyLoss()
 
     def set_data(self, data):
-        self.image = data.image.cuda()
-        self.target = data.target.cuda()
+        self.image = data.image.to('cuda:0', non_blocking=True)
+        self.target = data.target.to('cuda:0', non_blocking=True)
 
     def eval(self):
         self.net_main.eval()
@@ -98,7 +98,7 @@ def val(val_dataset: 'Single task_dataset', model: BaseModel, task_index, visual
         # Add matrixItem result
         matrixItems.append(model.get_matrix_item(task_index))
 
-    res = sum(matrixItems, MatrixItem()(accuracy=0, loss=0))
+    res = my_sum(matrixItems)
     res = res / len(matrixItems)
     logging.info(f"Validation Time Taken: {time.time() - start_time} sec")
     return res, matrixItems
@@ -142,7 +142,7 @@ def train(opt, model, task_index, continued_task_index, train_dataset, val_datas
             model.save_networks(continued_task_index, epoch="best")
 
         logging.info(
-            f'End of epoch {epoch} / {opt.n_epochs + opt.n_epochs_decay} \t train_loss={total_loss.item()},val:{val_matrix}, Time Taken: {time.time() - epoch_start_time} sec')
+            f'End of epoch {epoch} / {opt.n_epochs + opt.n_epochs_decay} \t train_loss={total_loss.detach()},val:{val_matrix}, Time Taken: {time.time() - epoch_start_time} sec')
         model.update_learning_rate()  # update learning rates at the end of every epoch.
 
 
@@ -178,12 +178,12 @@ def main(_):
             model.test()
             matrixItems.append(model.get_matrix_item())
 
-        val_matrix = sum(matrixItems, MatrixItem()(accuracy=0, loss=0))
+        val_matrix = my_sum(matrixItems)
         val_matrix = val_matrix / len(matrixItems)
 
         # logging output
         logging.info(
-            f'End of epoch {epoch} / {opt.n_epochs + opt.n_epochs_decay} \t train_loss={total_loss.item()},val:{val_matrix}, Time Taken: {time.time() - epoch_start_time} sec')
+            f'End of epoch {epoch} / {opt.n_epochs + opt.n_epochs_decay} \t train_loss={total_loss.detach()},val:{val_matrix}, Time Taken: {time.time() - epoch_start_time} sec')
 
 
 if __name__ == '__main__':

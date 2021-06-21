@@ -1,0 +1,10 @@
+scikit-learn
+pandas
+wrapt
+seaborn
+torch
+torchvision
+torchaudio
+prefetch_generator
+openpyxl
+dominate

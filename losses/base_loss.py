@@ -43,6 +43,10 @@ class BaseLoss(ABC):
         """
         return parser
 
+    @staticmethod
+    def default_value(opt):
+        return opt
+
     def get_current_losses(self):
         """Return traning losses_without_lambda / errors. fit.py will print out these errors on console, and save them to a file"""
         errors_ret = OrderedDict()
@@ -83,17 +87,34 @@ class KDLoss(nn.Module):
     def forward(self, preds, gts):
         # logging.debug("preds:" + str(preds))
         # logging.debug("gts:" + str(gts))
-        preds = F.softmax(preds, dim=-1)
-        preds = torch.pow(preds, 1. / self.temp)
-        # l_preds = F.softmax(preds, dim=-1)
-        l_preds = self.log_sotfmax(preds)
+        # preds = F.softmax(preds, dim=-1)
+        # preds = torch.pow(preds, 1. / self.temp)
+        # l_preds = self.log_sotfmax(preds)
+        #
+        # gts = F.softmax(gts, dim=-1)
+        # gts = torch.pow(gts, 1. / self.temp)
+        # gts = F.softmax(gts, dim=-1)
+        # loss = torch.mean(torch.sum(-gts * l_preds, dim=(1,)))
 
-        gts = F.softmax(gts, dim=-1)
-        gts = torch.pow(gts, 1. / self.temp)
-        gts = F.softmax(gts, dim=-1)
-        # l_gts = self.log_sotfmax(gts)
+        def loss_fn_kd(outputs, teacher_outputs):
+            """
+            Compute the knowledge-distillation (KD) loss given outputs, labels.
+            "Hyperparameters": temperature and alpha
+            NOTE: the KL Divergence for PyTorch comparing the softmaxs of teacher
+            and student expects the input tensor to be log probabilities! See Issue #2
+            """
+            KD_loss = nn.KLDivLoss()(F.log_softmax(outputs / self.temp, dim=-1),
+                                     F.softmax(teacher_outputs / self.temp, dim=-1)) * (self.temp * self.temp)
 
-        # l_preds = torch.log(l_preds)
-        # l_preds[l_preds != l_preds] = 0.
-        loss = torch.mean(torch.sum(-gts * l_preds, dim=(1,)))
+            return KD_loss
+
+        loss = loss_fn_kd(preds, gts)
         return loss
+
+
+if __name__ == '__main__':
+    kd_loss = KDLoss(temp=5)
+    preds = torch.FloatTensor([[.1, .9]])
+    targets = torch.FloatTensor([[.1, .9]])
+
+    print(kd_loss(preds, targets))

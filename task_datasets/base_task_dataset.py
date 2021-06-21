@@ -44,21 +44,25 @@ class BaseTaskDataset(ABC):
             the modified parser.
         """
 
-        return parser
+		return parser
 
-    @abstractmethod
-    def __len__(self):
-        """Return the total number of tasks."""
-        return 0
+	@staticmethod
+	def default_value(opt):
+		return opt
 
-    @abstractmethod
-    def __getitem__(self, task_index):
-        """Return a SimpleDataset for current task(index of task_index).
+	@abstractmethod
+	def __len__(self):
+		"""Return the total number of tasks."""
+		return 0
 
-        Parameters:
-            task_index - - a random integer for task indexing
+	@abstractmethod
+	def __getitem__(self, task_index):
+		"""Return a SimpleDataset for current task(index of task_index).
 
-        Returns:
-            a SimpleDataset
-        """
+		Parameters:
+			task_index - - a random integer for task indexing
+
+		Returns:
+			a SimpleDataset
+		"""
         pass

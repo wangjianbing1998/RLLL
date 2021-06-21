@@ -12,8 +12,8 @@
 
 from abc import ABC
 from abc import abstractmethod
-from torch import nn
 
+from torch import nn
 
 
 class BaseNet(nn.Module, ABC):
@@ -35,6 +35,10 @@ class BaseNet(nn.Module, ABC):
 
         return parser
 
+    @staticmethod
+    def default_value(opt):
+        return opt
+
     def __init__(self, opt):
         super().__init__()
         self.opt = opt
@@ -42,4 +46,3 @@ class BaseNet(nn.Module, ABC):
     @abstractmethod
     def forward(self, _input):
         pass
-

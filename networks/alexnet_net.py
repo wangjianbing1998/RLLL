@@ -29,8 +29,12 @@ class AlexnetNet(BaseNet):
             the modified parser.
 
         """
-        parser.add_argument("--pretrained", type=bool, default=False, help="if pretrained the base alexnet or not")
+        parser.add_argument("--pretrained", action='store_true', help="if pretrained the base alexnet or not")
         return parser
+
+    @staticmethod
+    def default_value(opt):
+        return opt
 
     def __init__(self, opt):
         BaseNet.__init__(self, opt)  # call the initialization method of BaseModel

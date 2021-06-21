@@ -14,6 +14,7 @@ import random
 import shutil
 import time
 from collections import defaultdict
+from functools import reduce
 from itertools import chain
 from math import ceil
 
@@ -144,8 +145,22 @@ def mkdir(path):
         path (str) -- a single directory path
     """
     if not os.path.exists(path):
-        os.makedirs(path)
+        os.makedirs(path, exist_ok=True)
         logging.info(f'Make Directory {path}')
+
+
+def rmfile(path):
+    if os.path.exists(path):
+        os.remove(path)
+        logging.warning(f'Delete File {path}')
+
+
+def rmfiles(paths):
+    if isinstance(paths, list) and not isinstance(paths, str):
+        for path in paths:
+            rmfile(path)
+    else:
+        rmfile(paths)
 
 
 def rmdir(path):
@@ -182,8 +197,8 @@ def seed_everything(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.benchmark = False  # if benchmark=True, deterministic will be False
-    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = True  # if benchmark=True, deterministic will be False
+    # torch.backends.cudnn.deterministic = False
 
 
 def split2numclasses(A, n) -> []:
@@ -242,11 +257,17 @@ class MultiOutput(object):
     def __len__(self):
         return self.nb_outputs
 
-    def cuda(self, device):
+    def cuda(self, device, non_blocking=True):
         if not self.is_cuda:
             self.is_cuda = True
-            self.task_outputs = [task_output.cuda(device) for task_output in self.task_outputs]
+            self.task_outputs = [task_output.to(device, non_blocking=non_blocking) for task_output in self.task_outputs]
         return self
+
+    def __eq__(self, other):
+        if hasattr(self, 'task_outputs') and hasattr(other, "task_outputs"):
+            return [task_output_1 == task_output_2 for task_output_1, task_output_2 in
+                    zip(self.task_outputs, other.task_outputs)]
+        return self is None and other is None
 
 
 class MatrixItem(object):
@@ -261,7 +282,7 @@ class MatrixItem(object):
         if preds is not None and gts is not None:
             self.accuracy = self.cal_accuracy(preds, gts)
             loss = loss_criterion(preds, gts)
-            self.loss = loss.item()
+            self.loss = loss.detach()
 
     def __add__(self, other):
         accuracy = self.accuracy + other.accuracy
@@ -290,7 +311,7 @@ class MatrixItem(object):
         >>> targets=torch.LongTensor([1,2,6,4,5])
         >>> preds=torch.FloatTensor([1,2,3,4,5])
         >>> matrixitem.cal_accuracy(preds,targets)
-        80
+        tensor(80.)
         >>> preds=torch.FloatTensor([
         ...            [0,1,0,0,0,0],
         ...            [0,0,1,0,0,0],
@@ -299,14 +320,14 @@ class MatrixItem(object):
         ...            [0,0,0,0,0,1],
         ...            ])
         >>> matrixitem.cal_accuracy(preds,targets)
-        80
+        tensor(80.)
         """
         arg_maxs = preds
         if len(preds.shape) == 2:
-            (max_vals, arg_maxs) = torch.max(preds.data, dim=1)
+            (max_vals, arg_maxs) = torch.max(preds.detach(), dim=1)
         num_correct = torch.sum(gts.squeeze() == arg_maxs.long())
         acc = (num_correct * 100.0 / len(preds))
-        return acc.item()
+        return acc.detach()
 
 
 class TestMatrix(object):
@@ -357,20 +378,6 @@ def is_gpu_avaliable(opt):
     return len(opt.gpu_ids) > 0 and torch.cuda.is_available()
 
 
-def is_new_distributed_avaliable(opt):
-    """for newly DistributedDataParallel"""
-    return is_gpu_avaliable(opt) and torch.distributed.is_available() and opt.use_distributed == 'new'
-
-
-def is_old_distributed_avaliable(opt):
-    """for old DistributedDataParallel"""
-    return is_gpu_avaliable(opt) and torch.distributed.is_available() and opt.use_distributed == 'old'
-
-
-def is_distributed_avaliable(opt):
-    return is_new_distributed_avaliable(opt) or is_old_distributed_avaliable(opt)
-
-
 def unsqueeze0(data: Bunch):
     data.image = data.image.unsqueeze(0)
     data.targets = data.targets.unsqueeze(0)
@@ -419,7 +426,7 @@ def get_log_level(level: str) -> int:
     return level
 
 
-def relabel(labels):
+def retarget(labels):
     '''
     re-code the targets into range(0,len(targets))
     Args:
@@ -428,7 +435,7 @@ def relabel(labels):
     Returns:
         recoded target2index
 
-    >>> relabel([1,5,3,6,7])
+    >>> retarget([1,5,3,6,7])
     {1: 0, 5: 1, 3: 2, 6: 3, 7: 4}
     '''
     label2index = dict([(label, index) for index, label in enumerate(labels)])
@@ -439,15 +446,16 @@ def load_best_ckptname(ckpts_path):
     ls = []
     for file in os.listdir(ckpts_path):
         if file.endswith('.pth'):
-            task_index, epoch, *others = file.split('_')
-            ls.append((int(task_index), float(epoch) if epoch != 'best' else float('inf')))
+            logging.info(f'loading file {file}')
+            task_index, step, epoch, *others = file.split('_')
+            ls.append((int(task_index), int(step), int(epoch) if epoch != 'best' else float('inf')))
     if len(ls) == 0:
         logging.warning(f'NotFoundBestCheckpoint at {ckpts_path}')
-        return None, None
-    best_taskindex, best_epoch = max(ls)
+        return None, None, None
+    best_taskindex, best_step, best_epoch = max(ls)
     if best_epoch == float('inf'):
         best_epoch = 'best'
-    return int(best_taskindex), str(best_epoch)
+    return int(best_taskindex), int(best_step), best_epoch
 
 
 class Checker(object):
@@ -456,6 +464,8 @@ class Checker(object):
         for k, v in kwargs.items():
             if k == 'dataset_list':
                 self.check_dataset_list(v)
+            elif k == 'labeled_ratio':
+                self.check_labeled_ratio(v)
             else:
                 raise ValueError(f'UnExpected checker {k}')
 
@@ -468,6 +478,11 @@ class Checker(object):
 
             if data_name not in dataset_names:
                 raise ValueError(f'Dataset named {data_name} not found!')
+
+    def check_labeled_ratio(self, v):
+        v = float(v)
+        if v < 0 or v > 1:
+            raise ValueError(f'Expected labeled_ratio between 0 and 1, but got {v}')
 
 
 def exec_times(times):
@@ -528,3 +543,52 @@ class ListDict(object):
         if not res and error_raise:
             raise ValueError(f'Expected the len of list on dict is all same, but got {len_of_v}')
         return res
+
+
+def random_choice(choices, rd):
+    """
+
+    >>> for _ in range(10):
+    ...     random_choice([1,2,3],[.1,.1,.8])
+
+    Args:
+        choices:
+        ps:
+
+    Returns:
+
+    """
+    assert len(choices) == len(ps), f'Expected len(choices) == len(rd), but got choices={choices}, rd={ps}'
+    return np.random.choice(choices, p=ps)
+
+
+def my_sum(*args):
+    return reduce(lambda x, y: x + y, *args)
+
+
+def get_basedirname(path, delimeter='/'):
+    dirs = path.split(delimeter)
+    if len(dirs) == 1:
+        dirs = path.split('\\')
+
+    index = len(dirs) - 1
+    while index >= 0:
+        if dirs[index] != '':
+            return dirs[index]
+        index -= 1
+    return None
+
+
+def judge_tensor_value_is_long(T):
+    """
+    >>> judge_tensor_value_is_long(torch.tensor([[ 4.2, 32.3, 32.4]]))
+    False
+    >>> judge_tensor_value_is_long(torch.tensor([[ 4., 32., 32.]]))
+    True
+
+
+    """
+    if isinstance(T, torch.LongTensor) or isinstance(T, torch.IntTensor):
+        return True
+    t = T == T.long().float()
+    return bool(t.max() == 1) and bool(t.min() == 1)

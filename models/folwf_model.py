@@ -1,5 +1,3 @@
-import torch
-
 from losses import create_loss
 from models.base_model import BaseModel
 from networks import create_net
@@ -31,6 +29,10 @@ class FoLwfModel(BaseModel):
 
         return parser
 
+    @staticmethod
+    def default_value(opt):
+        return opt
+
     def __init__(self, opt):
         BaseModel.__init__(self, opt)  # call the initialization method of BaseModel
 
@@ -45,17 +47,8 @@ class FoLwfModel(BaseModel):
 
         self.loss_criterion = create_loss(opt)
 
-        if self.isTrain:
-            if self.opt.optimizer_type == 'adam':
-                self.optimizer = torch.optim.Adam(self.net_main.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
-            elif opt.optimizer_type == 'sgd':
-                self.optimizer = torch.optim.SGD(self.net_main.parameters(), lr=opt.lr)
-            else:
-                raise ValueError(f"Expected opt.optimizer_type in ['adam','sgd'], but got {opt.optimizer_type}")
-            self.net_main, self.optimizer, self.loss_criterion = self.init_net_optimizer_with_apex(opt, self.net_main,
-                                                                                                   self.optimizer,
-                                                                                                   self.loss_criterion)
-            self.optimizers = [self.optimizer]
+        self.init_optimizers(opt)
+
         self.loss_names = getattr(self.loss_criterion, "loss_names")
 
         """
@@ -66,7 +59,7 @@ class FoLwfModel(BaseModel):
 
         self.plus_other_loss = True
         self.need_backward = False
-
+        self.max_step = 1
     def setup(self, task_index=0, step=1):
         if step == 1:
             BaseModel.setup(self, task_index)  # call the initialization method of BaseModel
@@ -76,4 +69,4 @@ class FoLwfModel(BaseModel):
             self.task_layer = True
 
         else:
-            raise ValueError(f'lwf Expected 1 == step, but got {step}')
+            raise ValueError(f'lwf Expected 1 <=step<={self.max_step}, but got {step}')

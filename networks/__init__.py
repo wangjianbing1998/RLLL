@@ -65,10 +65,9 @@ def find_net_using_name(net_name):
     return net
 
 
-def get_option_setter(net_name):
-    """Return the static method <modify_commandline_options> of the net_main class."""
-    net_class = find_net_using_name(net_name)
-    return net_class.modify_commandline_options
+def get_cls(net_name):
+    """Return the static method <modify_commandline_options> of the network class."""
+    return find_net_using_name(net_name)
 
 
 def create_net(opt):
@@ -84,7 +83,6 @@ def create_net(opt):
     instance = net(opt)
     logging.info("net [%s] was created" % type(instance).__name__)
     return instance
-
 
 
 class Identity(nn.Module):
@@ -132,12 +130,16 @@ def get_scheduler(optimizer, opt):
             return lr_l
 
         scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
+
     elif opt.lr_policy == 'step':
         scheduler = lr_scheduler.StepLR(optimizer, step_size=opt.lr_decay_iters, gamma=0.1)
     elif opt.lr_policy == 'plateau':
         scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10)
     elif opt.lr_policy == 'cosine':
         scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=opt.n_epochs, eta_min=0)
+    elif opt.lr_policy == 'cyclic':
+        scheduler = lr_scheduler.CyclicLR(optimizer, opt.lr, max_lr=opt.lr * 1.1, cycle_momentum=False)
+
     else:
         return NotImplementedError('learning rate policy [%s] is not implemented', opt.lr_policy)
     return scheduler

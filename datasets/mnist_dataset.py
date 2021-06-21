@@ -1,7 +1,5 @@
 import os
-from collections import defaultdict
 
-from sklearn.utils import Bunch
 from torchvision import datasets
 from torchvision.transforms import transforms
 
@@ -44,35 +42,11 @@ class MnistDataset(BaseDataset):
             ]
         )
         self.y_transforms = None
-        if self.opt.load_dataset_mode == 'dir':
 
-            self.data = []  # image_paths,targets
-            self.label2Indices = defaultdict(list)
-            image_dir = os.path.join(self.data_dir, phase)
+        dataset = datasets.MNIST(root=os.path.join(self.data_dir, 'raw_data'), train=self.isTrain, download=True)
+        self.data, self._labels, self.label2Indices, self.label2target, self.target2label = prepare_datas_by_standard_data(
+            dataset)
 
-            self._labels = os.listdir(image_dir)
-            # get label to targets, dict type
-            self.label2target = dict([(label, target) for target, label in enumerate(self.labels)])
-            self.target2label = dict([(target, label) for target, label in enumerate(self.labels)])
-
-            if not os.path.exists(image_dir):
-                raise FileNotFoundError(f"Image Dir {image_dir} not exists, please check it")
-            for root, label_dirs, files in os.walk(image_dir):
-                for file in files:
-                    label = os.path.basename(root)
-
-                    image_path = os.path.join(root, file)
-                    target = self.label2target[label]
-
-                    self.label2Indices[label].append(len(self.data))
-
-                    self.data.append(Bunch(image_path=image_path,
-                                           target=target)
-                                     )
-        elif self.opt.load_dataset_mode == 'reader':
-            dataset = datasets.MNIST(root=os.path.join(self.data_dir, 'raw_data'), train=self.isTrain,
-                                     download=True)
-            self.data, self._labels, self.label2Indices, self.label2target, self.target2label = prepare_datas_by_standard_data(
-                dataset)
-        else:
-            raise ValueError(f"Expected load_dataset_mode in [dir,reader], but got {self.opt.load_dataset_mode}")
+    def set_max_dataset_size(self):
+        super().set_max_dataset_size()
+        self.max_dataset_size = 5000  # number of images per class
